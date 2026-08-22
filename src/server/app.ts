@@ -165,6 +165,13 @@ app.get("/api/me", (c) => {
   return c.json({ user: publicUser(user) });
 });
 
+app.post("/api/logout", (c) => {
+  // Sessions are stateless HMAC tokens: this clears the cookie client-side
+  // but cannot revoke a token that was already issued.
+  c.header("set-cookie", "session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
+  return c.body(null, 204);
+});
+
 // ---------- trees ----------
 
 app.get("/api/trees", async (c) => {
@@ -199,8 +206,10 @@ app.delete("/api/trees/:id", async (c) => {
   const treeId = c.req.param("id");
   const access = await requireAccess(c, treeId, "creator");
   if (access instanceof Response) return access;
-  // manual cascade in FK-safe order
+  // manual cascade in FK-safe order; users.person_id must be released
+  // BEFORE persons are deleted or the batch 500s on the FK
   await c.env.DB.batch([
+    c.env.DB.prepare("UPDATE users SET person_id = NULL WHERE person_id IN (SELECT person_id FROM person WHERE tree_id = ?)").bind(treeId),
     c.env.DB.prepare("DELETE FROM child_of WHERE couple_id IN (SELECT couple_id FROM couple WHERE tree_id = ?)").bind(treeId),
     c.env.DB.prepare("DELETE FROM couple WHERE tree_id = ?").bind(treeId),
     c.env.DB.prepare("DELETE FROM person WHERE tree_id = ?").bind(treeId),
@@ -210,17 +219,14 @@ app.delete("/api/trees/:id", async (c) => {
   return c.json({ ok: true });
 });
 
-// ---------- membership (users join as family members) ----------
+// ---------- membership ----------
+// Users may self-join a tree, but always as VIEWER. Elevated roles are
+// granted only by the creator via /access.
 
 app.post("/api/trees/:id/members", async (c) => {
   const treeId = c.req.param("id");
   const user = c.get("user");
   if (!user) return bad(c, 401, "authentication required");
-  const body = await c.req.json().catch(() => null);
-  const role = body?.role;
-  if (!["editor", "viewer"].includes(role)) {
-    return bad(c, 400, "role must be editor or viewer");
-  }
   const tree = await c.env.DB.prepare("SELECT tree_id FROM trees WHERE tree_id = ?")
     .bind(treeId)
     .first();
@@ -231,8 +237,31 @@ app.post("/api/trees/:id/members", async (c) => {
     .bind(treeId, user.user_id)
     .first<{ role: string }>();
   if (existing) return bad(c, 409, `already a member (${existing.role})`);
-  await c.env.DB.prepare("INSERT INTO tree_access (tree_id,user_id,role) VALUES (?,?,?)")
-    .bind(treeId, user.user_id, role)
+  await c.env.DB.prepare("INSERT INTO tree_access (tree_id,user_id,role) VALUES (?,?,'viewer')")
+    .bind(treeId, user.user_id)
+    .run();
+  return c.json({ ok: true, role: "viewer" }, 201);
+});
+
+/** Creator-only grant: {email, role: 'editor'|'viewer'} */
+app.post("/api/trees/:id/access", async (c) => {
+  const treeId = c.req.param("id");
+  const access = await requireAccess(c, treeId, "creator");
+  if (access instanceof Response) return access;
+  const body = await c.req.json().catch(() => null);
+  const role = body?.role;
+  if (!["editor", "viewer"].includes(role)) {
+    return bad(c, 400, "role must be editor or viewer");
+  }
+  if (!body?.email) return bad(c, 400, "email is required");
+  const target = (await c.env.DB.prepare("SELECT user_id FROM users WHERE email = ?")
+    .bind(String(body.email).toLowerCase())
+    .first()) as { user_id: string } | null;
+  if (!target) return bad(c, 404, "no such user");
+  await c.env.DB.prepare(
+    "INSERT INTO tree_access (tree_id,user_id,role) VALUES (?,?,?) ON CONFLICT(tree_id,user_id) DO UPDATE SET role = excluded.role",
+  )
+    .bind(treeId, target.user_id, role)
     .run();
   return c.json({ ok: true, role }, 201);
 });
@@ -343,6 +372,24 @@ app.post("/api/persons/:pid/photo", async (c) => {
   }
 });
 
+app.delete("/api/persons/:pid", async (c) => {
+  const pid = c.req.param("pid");
+  const row = (await c.env.DB.prepare(
+    "SELECT tree_id FROM person WHERE person_id = ?",
+  ).bind(pid).first()) as { tree_id: string } | null;
+  if (!row) return bad(c, 404, "person not found");
+  const access = await requireAccess(c, row.tree_id, "editor");
+  if (access instanceof Response) return access;
+  // release references first: child links, partner slots, then the row
+  await c.env.DB.batch([
+    c.env.DB.prepare("DELETE FROM child_of WHERE child_person_id = ?").bind(pid),
+    c.env.DB.prepare("UPDATE couple SET partner_a = NULL WHERE partner_a = ?").bind(pid),
+    c.env.DB.prepare("UPDATE couple SET partner_b = NULL WHERE partner_b = ?").bind(pid),
+    c.env.DB.prepare("DELETE FROM person WHERE person_id = ?").bind(pid),
+  ]);
+  return c.json({ ok: true });
+});
+
 // ---------- couples ----------
 
 app.post("/api/trees/:id/couples", async (c) => {
@@ -406,7 +453,8 @@ app.get("/api/trees/:id/generations", async (c) => {
 
   // Generation of a couple = 1 + generation of the couple whose child one of
   // its partners is. Root couples have no same-tree parent couple.
-  // UNION (not UNION ALL) guarantees termination on accidental cycles.
+  // UNION dedups (couple_id,lvl) pairs and lvl is capped at 20: belt-and-braces
+  // against accidental couple cycles (UNION alone still grows lvls unbounded).
   const levels = await c.env.DB.prepare(
     `WITH RECURSIVE gen(couple_id, lvl) AS (
        SELECT c.couple_id, 1
@@ -423,6 +471,7 @@ app.get("/api/trees/:id/generations", async (c) => {
        JOIN child_of co ON co.couple_id = g.couple_id
        JOIN couple k ON k.tree_id = ?
          AND (k.partner_a = co.child_person_id OR k.partner_b = co.child_person_id)
+       WHERE g.lvl < 20
      )
      SELECT couple_id, MAX(lvl) AS lvl FROM gen GROUP BY couple_id`,
   ).bind(treeId, treeId).all<{ couple_id: string; lvl: number }>();

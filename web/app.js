@@ -159,6 +159,7 @@ async function renderTrees() {
     <div class="new-tree-row card">
       <input id="nt-name" placeholder="New family tree name…">
       <button id="nt-go" class="btn-primary" style="margin-top:0;width:auto">Create</button>
+      <button id="logout-btn" class="btn-primary" style="margin-top:0;width:auto;background:#7d8c84">Log out</button>
     </div>
     <div class="tree-list">
       ${data.trees.map(t => `
@@ -168,6 +169,11 @@ async function renderTrees() {
         </div>`).join('') || '<div class="loading">No trees yet — create one above.</div>'}
     </div>`;
 
+  document.getElementById('logout-btn').onclick = async () => {
+    try { await api('/api/logout', { method: 'POST' }); } catch (e) { /* cookie cleared regardless */ }
+    ME = null;
+    location.hash = '#/login';
+  };
   document.querySelectorAll('.tree-item').forEach(el => {
     el.onclick = () => { location.hash = '#/tree/' + el.dataset.id; };
   });

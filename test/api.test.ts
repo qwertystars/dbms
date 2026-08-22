@@ -73,23 +73,22 @@ async function fixtureTree() {
   return { creator, treeId };
 }
 
+/** Create an unaffiliated user; creator grants tree access via /access. */
 async function joinAs(
+  creator: string,
   treeId: string,
   role: "editor" | "viewer",
 ): Promise<string> {
+  const email = `${role}-${Math.random()}@t.local`;
   const u = await req("/api/signup", {
     method: "POST",
-    body: {
-      email: `${role}-${Math.random()}@t.local`,
-      name: role,
-      password: "hunter2secret",
-    },
+    body: { email, name: role, password: "hunter2secret" },
   });
   const cookie = u.setCookie!.split(";")[0];
-  const r = await req(`/api/trees/${treeId}/members`, {
+  const r = await req(`/api/trees/${treeId}/access`, {
     method: "POST",
-    cookie,
-    body: { role },
+    cookie: creator,
+    body: { email, role },
   });
   expect(r.status).toBe(201);
   return cookie;
@@ -136,8 +135,8 @@ describe("trees + RBAC (SC3)", () => {
 
   it("viewer PUT person=403, editor PUT=200, non-member PUT=403, creator DELETE tree=200", async () => {
     const { creator, treeId } = await fixtureTree();
-    const editor = await joinAs(treeId, "editor");
-    const viewer = await joinAs(treeId, "viewer");
+    const editor = await joinAs(creator, treeId, "editor");
+    const viewer = await joinAs(creator, treeId, "viewer");
 
     // editor seeds one person
     const p = await req(`/api/trees/${treeId}/persons`, {
@@ -172,8 +171,7 @@ describe("trees + RBAC (SC3)", () => {
 describe("persons/couples/children CRUD", () => {
   it("editor adds couple + child links; viewer cannot create persons", async () => {
     const { creator, treeId } = await fixtureTree();
-    void creator;
-    const editor = await joinAs(treeId, "editor");
+    const editor = await joinAs(creator, treeId, "editor");
     const mk = (name: string, gender: string, dob: string) =>
       req(`/api/trees/${treeId}/persons`, { method: "POST", cookie: editor, body: { name, gender, dob } });
     const f = await mk("Murugan", "m", "1950-03-01");
@@ -195,7 +193,7 @@ describe("persons/couples/children CRUD", () => {
     });
     expect(link.status).toBe(201);
 
-    const viewer = await joinAs(treeId, "viewer");
+    const viewer = await joinAs(creator, treeId, "viewer");
     // viewer cannot create persons
     const vCreate = await req(`/api/trees/${treeId}/persons`, {
       method: "POST", cookie: viewer, body: { name: "Nope", gender: "f", dob: "1999-01-01" },
@@ -207,7 +205,7 @@ describe("persons/couples/children CRUD", () => {
 describe("SC1 generations (recursive CTE)", () => {
   it("returns G1..G3 bands for three linked couples", async () => {
     const { creator, treeId } = await fixtureTree();
-    const editor = await joinAs(treeId, "editor");
+    const editor = await joinAs(creator, treeId, "editor");
     const mk = async (name: string, gender: string, dob: string) => {
       const r = await req(`/api/trees/${treeId}/persons`, {
         method: "POST", cookie: editor, body: { name, gender, dob },
@@ -253,7 +251,7 @@ describe("SC1 generations (recursive CTE)", () => {
 describe("SC2 kinship endpoint", () => {
   it("father's younger brother yields uncle/chacha/chittappa/kaka", async () => {
     const { creator, treeId } = await fixtureTree();
-    const editor = await joinAs(treeId, "editor");
+    const editor = await joinAs(creator, treeId, "editor");
     const mk = async (name: string, gender: string, dob: string) => {
       const r = await req(`/api/trees/${treeId}/persons`, {
         method: "POST", cookie: editor, body: { name, gender, dob },
@@ -294,8 +292,7 @@ describe("SC2 kinship endpoint", () => {
 describe("photo upload (B2)", () => {
   it("503 b2_not_configured when keys absent", async () => {
     const { creator, treeId } = await fixtureTree();
-    void creator;
-    const editor = await joinAs(treeId, "editor");
+    const editor = await joinAs(creator, treeId, "editor");
     const p = await req(`/api/trees/${treeId}/persons`, {
       method: "POST", cookie: editor, body: { name: "PhotoGuy", gender: "m" },
     });
@@ -313,5 +310,145 @@ describe("photo upload (B2)", () => {
     expect(res.status).toBe(503);
     const j: any = await res.json();
     expect(j.error).toBe("b2_not_configured");
+  });
+});
+
+describe("membership contract (creator grants only)", () => {
+  async function signupAs(email: string): Promise<string> {
+    const u = await req("/api/signup", {
+      method: "POST",
+      body: { email, name: email.split("@")[0], password: "hunter2secret" },
+    });
+    expect(u.status).toBe(201);
+    return u.setCookie!.split(";")[0];
+  }
+
+  it("self-join via /members is coerced to viewer", async () => {
+    const { creator, treeId } = await fixtureTree();
+    void creator;
+    const c = await signupAs(`self-${Date.now()}@t.local`);
+    const r = await req(`/api/trees/${treeId}/members`, {
+      method: "POST", cookie: c, body: { role: "editor" },
+    });
+    expect(r.status).toBe(201);
+    expect(r.json.role).toBe("viewer");
+    // coerced viewer cannot edit
+    const p = await req(`/api/trees/${treeId}/persons`, {
+      method: "POST", cookie: c, body: { name: "X", gender: "m" },
+    });
+    expect(p.status).toBe(403);
+  });
+
+  it("non-creators cannot grant roles; creator can", async () => {
+    const { creator, treeId } = await fixtureTree();
+    const editor = await joinAs(creator, treeId, "editor");
+    const email = `grant-${Date.now()}@t.local`;
+    await signupAs(email);
+    // editor attempts a grant -> 403
+    const denied = await req(`/api/trees/${treeId}/access`, {
+      method: "POST", cookie: editor, body: { email, role: "editor" },
+    });
+    expect(denied.status).toBe(403);
+    // creator grants editor -> grantee can now edit
+    const ok = await req(`/api/trees/${treeId}/access`, {
+      method: "POST", cookie: creator, body: { email, role: "editor" },
+    });
+    expect(ok.status).toBe(201);
+    const login = await req("/api/login", {
+      method: "POST", body: { email, password: "hunter2secret" },
+    });
+    const grantee = login.setCookie!.split(";")[0];
+    const p = await req(`/api/trees/${treeId}/persons`, {
+      method: "POST", cookie: grantee, body: { name: "Grantee", gender: "f" },
+    });
+    expect(p.status).toBe(201);
+  });
+
+  it("logout clears the session cookie", async () => {
+    const c = await newUser(`lo-${Date.now()}@t.local`);
+    const r = await req("/api/logout", { method: "POST", cookie: c });
+    expect(r.status).toBe(204);
+    expect(r.setCookie).toContain("Max-Age=0");
+  });
+});
+
+describe("person DELETE + tree delete with linked users", () => {
+  it("editor deletes a person; references are cleaned up; viewer forbidden", async () => {
+    const { creator, treeId } = await fixtureTree();
+    void creator;
+    const editor = await joinAs(creator, treeId, "editor");
+    const mk = async (name: string, gender: string) => {
+      const r = await req(`/api/trees/${treeId}/persons`, {
+        method: "POST", cookie: editor, body: { name, gender },
+      });
+      return r.json.person.person_id as string;
+    };
+    const dad = await mk("Dad", "m");
+    const kid = await mk("Kid", "o");
+    const cpl = await req(`/api/trees/${treeId}/couples`, {
+      method: "POST", cookie: editor, body: { partner_a: dad, partner_b: null },
+    });
+    await req(`/api/couples/${cpl.json.couple.couple_id}/children`, {
+      method: "POST", cookie: editor, body: { child_person_id: kid },
+    });
+    const viewer = await joinAs(creator, treeId, "viewer");
+    expect((await req(`/api/persons/${dad}`, { method: "DELETE", cookie: viewer })).status).toBe(403);
+    expect((await req(`/api/persons/${dad}`, { method: "DELETE", cookie: editor })).status).toBe(200);
+    expect((await req(`/api/persons/${dad}`, { cookie: editor })).status).toBe(404);
+    // couple survives with partner nulled out, child link intact
+    const g = await req(`/api/trees/${treeId}/generations`, { cookie: editor });
+    expect(g.status).toBe(200);
+  });
+
+  it("deleting a tree nulls users.person_id instead of failing FK (no 500)", async () => {
+    const { creator, treeId } = await fixtureTree();
+    const editor = await joinAs(creator, treeId, "editor");
+    const p = await req(`/api/trees/${treeId}/persons`, {
+      method: "POST", cookie: editor, body: { name: "Linked", gender: "f" },
+    });
+    const pid = p.json.person.person_id as string;
+    // user whose profile links into the tree
+    await req("/api/signup", {
+      method: "POST",
+      body: { email: `linked-${Date.now()}@t.local`, name: "L", password: "hunter2secret", person_id: pid },
+    });
+    const del = await req(`/api/trees/${treeId}`, { method: "DELETE", cookie: creator });
+    expect(del.status).toBe(200);
+  });
+
+  it("generations terminates on accidental couple cycles (lvl capped)", async () => {
+    const { creator, treeId } = await fixtureTree();
+    const editor = await joinAs(creator, treeId, "editor");
+    const mk = async (name: string, gender: string) => {
+      const r = await req(`/api/trees/${treeId}/persons`, {
+        method: "POST", cookie: editor, body: { name, gender },
+      });
+      return r.json.person.person_id as string;
+    };
+    const a = await mk("A", "m");
+    const b = await mk("B", "f");
+    const x = await mk("X", "m");
+    const z = await mk("Z", "f");
+    const c1 = await req(`/api/trees/${treeId}/couples`, {
+      method: "POST", cookie: editor, body: { partner_a: a, partner_b: b },
+    });
+    const c2 = await req(`/api/trees/${treeId}/couples`, {
+      method: "POST", cookie: editor, body: { partner_a: x, partner_b: null },
+    });
+    const c3 = await req(`/api/trees/${treeId}/couples`, {
+      method: "POST", cookie: editor, body: { partner_a: z, partner_b: null },
+    });
+    // X is child of C1; Z child of C2; and A is ALSO child of C3 -> cycle A->C1->X->C2->Z->C3->A
+    for (const [cid, kid] of [
+      [c1.json.couple.couple_id, x],
+      [c2.json.couple.couple_id, z],
+      [c3.json.couple.couple_id, a],
+    ] as Array<[string, string]>) {
+      await req(`/api/couples/${cid}/children`, {
+        method: "POST", cookie: editor, body: { child_person_id: kid },
+      });
+    }
+    const g = await req(`/api/trees/${treeId}/generations`, { cookie: creator });
+    expect(g.status).toBe(200); // must not hang/500
   });
 });
