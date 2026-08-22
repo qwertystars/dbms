@@ -1,0 +1,1 @@
+{"schemaVersion":1,"runId":"dag_4085e6eb-0890-44fc-a3d6-8c5d26b2b224","nodeId":"frontend","runStats":{"runtime_ms":438275,"turns":4,"tool_calls":0,"generation_ms":398722,"cost_usd":0,"token_status":"complete","cost_status":"reported","duration_status":"monotonic"}}

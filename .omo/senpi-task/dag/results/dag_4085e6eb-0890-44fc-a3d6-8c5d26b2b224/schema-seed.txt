@@ -1,0 +1,14 @@
+Done — `pnpm exec vitest run test/schema.test.ts` is green (10/10 passing), and `pnpm typecheck` is clean. Only in-scope files were written: `migrations/0001_init.sql`, `migrations/0002_seed.sql`, `test/schema.test.ts`.
+
+What the suite proves:
+- CHECK constraints: `tree_access.role='admin'` and `person.gender='x'` both rejected.
+- FK enforcement: with `PRAGMA foreign_keys=ON`, an orphan `child_of` insert fails.
+- Recursive CTE (verbatim from spec): Narayanan tree yields bands 1..4 with exactly one couple per band and child_count 1 on the g4 couple; Path tree yields bands 1..2.
+- PK uniqueness: duplicate `(lang, relation_key)` into `kin_term` fails.
+- Seed shape: all three indexes exist, every language has all canonical keys, and Aadhira/Srijan exist as unmarried children of their respective g4/g2 couples.
+
+Two judgment calls worth knowing about:
+1. The authoritative row list contains no `self` row even though `self` is a canonical key. I treated `self` as runtime-only (identity resolution lives in TypeScript) and documented that in the test rather than inventing unlisted seed rows.
+2. The sheet lists `bn|ma|ma|mother`; `ma` isn't a canonical relation key, so it's stored as `bn|mo|ma|mother` (term/gloss verbatim) — noted in the seed header comment.
+
+Red-first was followed: initial run failed with ENOENT on `0001_init.sql`, then SQL was written until green. No commit made, per instructions.
