@@ -1,0 +1,6 @@
+HTTP/1.1 201 Created
+Content-Length: 130
+Content-Type: application/json
+Set-Cookie: session=a49729c1-23cc-4e09-bae0-74af5b3cc708.1789969508.1829c95a2388bc62867e3046d7b3eb93f851b5e359bd1b3581b2d16e1dd57b41; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000
+
+{"user":{"user_id":"a49729c1-23cc-4e09-bae0-74af5b3cc708","email":"kannan@qa.local","name":"Kannan","lang":"ta","person_id":null}}

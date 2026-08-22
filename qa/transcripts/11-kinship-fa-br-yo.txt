@@ -1,0 +1,5 @@
+HTTP/1.1 200 OK
+Content-Length: 330
+Content-Type: application/json
+
+{"relation_key":"fa_br_yo","path":["up","up","down"],"terms":{"en":{"term":"uncle","gloss":"father's younger brother"},"hi":{"term":"chacha","gloss":"father's younger brother"},"ta":{"term":"chittappa","gloss":"father's younger brother"},"bn":{"term":"kaka","gloss":"father's younger brother"}},"gloss":"father's younger brother"}

@@ -85,7 +85,7 @@ window.addEventListener('hashchange', route);
 
 async function renderLogin() {
   if (!ME) {
-    try { ME = await api('/api/me'); } catch (e) { ME = null; }
+    try { ME = (await api('/api/me')).user; } catch (e) { ME = null; }
   }
   if (ME) { location.hash = '#/trees'; return; }
 
@@ -129,7 +129,7 @@ async function renderLogin() {
     ev.preventDefault();
     const fd = new FormData(ev.target);
     try {
-      ME = await api('/api/login', { method: 'POST', body: Object.fromEntries(fd) });
+      ME = (await api('/api/login', { method: 'POST', body: Object.fromEntries(fd) })).user;
       location.hash = '#/trees';
     } catch (e) { showBanner(e.message); }
   };
@@ -138,7 +138,7 @@ async function renderLogin() {
     const fd = new FormData(ev.target);
     try {
       await api('/api/signup', { method: 'POST', body: Object.fromEntries(fd) });
-      ME = await api('/api/login', { method: 'POST', body: Object.fromEntries(fd) });
+      ME = (await api('/api/login', { method: 'POST', body: Object.fromEntries(fd) })).user;
       location.hash = '#/trees';
     } catch (e) { showBanner(e.message); }
   };
@@ -148,7 +148,7 @@ async function renderLogin() {
 
 async function renderTrees() {
   if (!ME) {
-    try { ME = await api('/api/me'); } catch (e) { ME = null; }
+    try { ME = (await api('/api/me')).user; } catch (e) { ME = null; }
   }
   if (!ME) { location.hash = '#/login'; return; }
 

@@ -1,0 +1,5 @@
+HTTP/1.1 503 Service Unavailable
+Content-Length: 62
+Content-Type: application/json
+
+{"error":"b2_not_configured","message":"B2 is not configured"}
