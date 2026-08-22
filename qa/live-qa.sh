@@ -45,13 +45,13 @@ TREE=$(curl -s -b "$QA_DIR/jars/creator.txt" -X POST "$BASE/api/trees" \
 [ -n "$TREE" ] || fail "tree id empty"
 echo "TREE=$TREE" | tee "$QA_DIR/tree-id.env"
 
-step "members join: meena=editor, vetri=viewer (stranger stays out)"
-curl -si -b "$QA_DIR/jars/editor.txt" -X POST "$BASE/api/trees/$TREE/members" \
-  -H 'content-type: application/json' -d '{"role":"editor"}' | tee "$T/04-join-editor.txt" >/dev/null
+step "membership: creator grants meena editor; vetri self-joins as viewer"
+curl -si -b "$QA_DIR/jars/creator.txt" -X POST "$BASE/api/trees/$TREE/access" \
+  -H 'content-type: application/json' -d '{"email":"meena@qa.local","role":"editor"}' | tee "$T/04-access-grant-editor.txt" >/dev/null
 curl -si -b "$QA_DIR/jars/viewer.txt" -X POST "$BASE/api/trees/$TREE/members" \
   -H 'content-type: application/json' -d '{"role":"viewer"}' | tee "$T/05-join-viewer.txt" >/dev/null
-grep -qi '^HTTP/1.1 201' "$T/04-join-editor.txt" || fail "editor join not 201"
-grep -qi '^HTTP/1.1 201' "$T/05-join-viewer.txt" || fail "viewer join not 201"
+grep -qi '^HTTP/1.1 201' "$T/04-access-grant-editor.txt" || fail "creator grant not 201"
+tail -1 "$T/05-join-viewer.txt" | grep -q '"role":"viewer"' || fail "self-join not coerced viewer"
 
 step "editor seeds the Narayanan lineage (G1..G3)"
 E="-b $QA_DIR/jars/editor.txt"

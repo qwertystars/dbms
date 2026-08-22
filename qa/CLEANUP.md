@@ -8,3 +8,7 @@ killed tmux dbms-ui8790 (wrangler dev :8790 inspector 9230)
 port 8788 closed
 port 8790 closed
 removed qa/jars qa/tmp-photo.png .wrangler/state-{live,ui}
+== post-review rerun ==
+killed tmux dbms-dev8788
+port 8788 closed
+removed qa/jars .wrangler/state-live

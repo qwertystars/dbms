@@ -4,7 +4,7 @@ Success-criteria map. All commands run from repo root.
 
 | SC | Criterion | Evidence | Status |
 |----|-----------|----------|--------|
-| SC1 | Live happy path signup→login→create tree→seed Narayanan lineage→GET generations G1..G3 | `qa/transcripts/01..05,10-generations.txt`, `qa/live-qa.sh` (asserts band names/count) | PASS |
+| SC1 | Live happy path signup→login→create tree→seed Narayanan lineage→GET generations G1..G3 | `qa/transcripts/01..05,10-generations.txt` (04 = creator grant via /access), `qa/live-qa.sh` (asserts band names/count) | PASS |
 | SC2 | Kinship endpoint fa_br_yo → uncle/chacha/chittappa/kaka | `qa/transcripts/11-kinship-fa-br-yo.txt`, sanity `12-kinship-brother-el.json`; unit suite test/kinship.test.ts (50 tests) | PASS |
 | SC3 | RBAC adversarial matrix | `20-rbac-viewer-put.txt`=403, `21-rbac-editor-put.txt`=200, `22-rbac-outsider-put.txt`=403, `23-rbac-creator-delete-tree.txt`=200 (+editor DELETE 403 inline in script log) | PASS |
 | SC4 | Playwright UI flow: login→couples→small box→mother name→big modal all fields+kinship badge | `qa/ui/01-login.png`…`05-big-modal.png`, DOM assertions `qa/ui-qa.mjs`, badge cross-checked vs API (`paatti`, grandmo_pat) | PASS |
