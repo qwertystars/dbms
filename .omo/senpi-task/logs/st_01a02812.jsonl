@@ -1,0 +1,9 @@
+{"type":"transition_applied","payload":{"type":"transition_applied","status":"running","residency_state":"resident"}}
+{"type":"assistant_message","payload":{"text":"I read this as verification-only inspection of frontend deliverables - I'll run the four checks and report PASS/FAIL."}}
+{"type":"tool_execution","payload":{"tool":"bash","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"bash","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"bash","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"bash","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"bash","is_error":false}}
+{"type":"assistant_message","payload":{"text":"**Verdict: PASS — all four checks pass.**\n\n1. **PASS** — `web/index.html`, `web/style.css`, `web/app.js` all exist; `node --check web/app.js` exits 0 (SYNTAX_OK).\n2. **PASS** — hash routes defined: `/^#\\/login$/` → renderLogin, `/^#\\/trees$/` → renderTrees, `/^#\\/tree\\/([\\w-]+)$/` → renderTree, with `hashchange` listener.\n3. **PASS** — `.couple-card` click calls `openSmallBox`, which renders a small box with Father name / Mother name / Other information rows; each name is a `.person-link` button that calls `openBigModal(pid)`. The big modal renders photo, name, gender/dob subtitle, a kinship badge (`kinship-badge` + gloss from `/api/kinship`), and all fields via FIELD_DEFS (name, gender, dob, dod, height, weight, address, mail, phone, job, degree, place) plus Other information.\n4. **PASS** — exactly four `ME = (await api(...)).user` sites (lines 88, 132, 141, 151), all unwrapping `.user`.\n\nRead-only throughout; no files modified, no server run."}}
+{"type":"transition_applied","payload":{"type":"transition_applied","status":"completed","residency_state":"resident"}}
