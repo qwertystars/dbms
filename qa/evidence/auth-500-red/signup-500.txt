@@ -1,6 +1,0 @@
-$ curl -si -X POST http://100.80.185.56:8788/api/signup -H 'content-type: application/json' -d '{"email":"qa-red-green-1787642030291@example.com","name":"QA Red Green","password":"supersecret1"}'
-HTTP/1.1 500 Internal Server Error
-Content-Length: 21
-Content-Type: text/plain; charset=UTF-8
-
-Internal Server Error

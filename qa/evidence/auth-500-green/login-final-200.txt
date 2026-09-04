@@ -1,6 +1,0 @@
-HTTP/1.1 200 OK
-Content-Length: 148
-Content-Type: application/json
-Set-Cookie: session=b526b97f-328c-4ee0-8e1d-edd76dfb107b.1790234844.3ccf42c3b70026a0e011ec0a3b7914f167d2dfc57d68c54d8ff4617a0cd05ae7; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000
-
-{"user":{"user_id":"b526b97f-328c-4ee0-8e1d-edd76dfb107b","email":"qa-final-1787642844@example.com","name":"QA Final","lang":"en","person_id":null}}

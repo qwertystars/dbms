@@ -1,6 +1,0 @@
-HTTP/1.1 200 OK
-Content-Length: 148
-Content-Type: application/json
-Set-Cookie: session=4091c793-2537-43f1-8cdb-1904afad6f77.1790234177.2dda49fc850af62d7815fe5c4318539cb5e3ed744fea8ca747ab352d48355fa8; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000
-
-{"user":{"user_id":"4091c793-2537-43f1-8cdb-1904afad6f77","email":"qa-green-1787642177@example.com","name":"QA Green","lang":"en","person_id":null}}

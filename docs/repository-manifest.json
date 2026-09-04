@@ -1,0 +1,31 @@
+{
+  "project_mode": "GREENFIELD",
+  "working_name": "Family Social Network",
+  "spec_version": "1.0",
+  "generated_files": [
+    "AGENTS.md",
+    "README.md",
+    "docs/INDEX.md",
+    "docs/architecture/backend-architecture.md",
+    "docs/architecture/decisions/ADR-001-family-graph-model.md",
+    "docs/architecture/decisions/ADR-002-account-person-separation.md",
+    "docs/architecture/decisions/ADR-003-modular-monolith.md",
+    "docs/architecture/decisions/README.md",
+    "docs/architecture/frontend-architecture.md",
+    "docs/contracts/api-contract.md",
+    "docs/contracts/data-model.md",
+    "docs/contracts/event-contracts.md",
+    "docs/domain/business-logic.md",
+    "docs/domain/invariants.md",
+    "docs/execution/current-state.md",
+    "docs/execution/implementation-plan.md",
+    "docs/operations/deployment.md",
+    "docs/operations/observability.md",
+    "docs/operations/runbooks/database-migration.md",
+    "docs/operations/runbooks/family-data-access.md",
+    "docs/product/product-spec.md",
+    "docs/product/source-notes.md",
+    "docs/quality/testing-strategy.md",
+    "docs/security/security-model.md"
+  ]
+}

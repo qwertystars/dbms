@@ -1,5 +1,0 @@
-HTTP/1.1 409 Conflict
-Content-Length: 38
-Content-Type: application/json
-
-{"message":"email already registered"}

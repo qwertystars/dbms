@@ -1,8 +1,0 @@
-Verdict: PASS — all four checks verified.
-
-1. **Artifacts exist, all >10KB**: 01-login.png (19,138B), 02-trees.png (21,748B), 03-tree-board.png (38,737B), 04-smallbox.png (47,152B), 05-big-modal.png (51,017B).
-2. **Assertions present in qa/ui-qa.mjs**: `bands === 3`, `cards === 4`, small box checks Father=Annadurai / Mother=Lakshmi / "Arranged marriage, 1952" other-info; modal asserts all six fields (Name, Gender, DOB, Address, Job, Other information); kinship badge non-empty and cross-checked via fetch to `/api/kinship` against `kin.terms.ta.term` using the session cookie from the netscape jar.
-3. **Exit semantics correct**: final line prints "UI QA PASSED" or "UI QA FAILED: N failure(s)" and `process.exit(failures === 0 ? 0 : 1)`; pageerror events also increment failures.
-4. **Screenshots visually confirmed**: 04-smallbox.png shows the small box overlay with FATHER NAME Annadurai, MOTHER NAME Lakshmi, OTHER INFORMATION "Arranged marriage, 1952"; 05-big-modal.png shows the Lakshmi modal with kinship badge "paatti" (father's mother) and all person fields populated.
-
-No writes performed; read-only audit complete.

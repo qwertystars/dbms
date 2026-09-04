@@ -1,6 +1,0 @@
-HTTP/1.1 201 Created
-Content-Length: 142
-Content-Type: application/json
-Set-Cookie: session=0603d222-6ba0-4d88-b6b1-df8dd46e067b.1790234408.9ac58f8ab46968aa5c341c63e55d29f24a1230e4a8806f65f76cdcb9398bb0bc; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000
-
-{"user":{"user_id":"0603d222-6ba0-4d88-b6b1-df8dd46e067b","email":"fresh2-probe@example.com","name":"Fresh Two","lang":"en","person_id":null}}

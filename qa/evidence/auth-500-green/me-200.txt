@@ -1,5 +1,0 @@
-HTTP/1.1 200 OK
-Content-Length: 148
-Content-Type: application/json
-
-{"user":{"user_id":"4091c793-2537-43f1-8cdb-1904afad6f77","email":"qa-green-1787642177@example.com","name":"QA Green","lang":"en","person_id":null}}
