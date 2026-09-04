@@ -1,0 +1,22 @@
+[1] goto http://100.80.185.56:8788/#/login
+NETWORK 401 http://100.80.185.56:8788/api/me
+CONSOLE ERROR: Failed to load resource: the server responded with a status of 401 (Unauthorized)
+[2] click Sign up tab
+[3] fill signup form (qa-browser-1787642880879@example.com)
+[4] submit signup
+ok  signup form submitted and redirected to #/trees
+ok  trees list rendered after signup
+ok  brand shows 'Your families'
+[5] click Log out
+ok  logout redirected to #/login
+NETWORK 401 http://100.80.185.56:8788/api/me
+CONSOLE ERROR: Failed to load resource: the server responded with a status of 401 (Unauthorized)
+[6] fill login form
+[7] submit login
+ok  login form submitted and redirected to #/trees
+[8] wrong-password login shows message
+NETWORK 401 http://100.80.185.56:8788/api/me
+CONSOLE ERROR: Failed to load resource: the server responded with a status of 401 (Unauthorized)
+NETWORK 401 http://100.80.185.56:8788/api/login
+CONSOLE ERROR: Failed to load resource: the server responded with a status of 401 (Unauthorized)
+ok  banner shows server message: "invalid credentials"

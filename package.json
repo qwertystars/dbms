@@ -4,9 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --port 8788",
+    "dev": "pnpm db:migrate:local && wrangler dev --port 8788",
+    "dev:tailnet": "pnpm db:migrate:local && wrangler dev --port 8788 --ip 100.80.185.56",
     "deploy": "wrangler deploy",
     "db:migrate": "wrangler d1 migrations apply dbms --local",
+    "db:migrate:local": "wrangler d1 migrations apply dbms --local --persist-to \"${PERSIST_TO:-.wrangler/state/v3/d1}\"",
     "db:migrate:remote": "wrangler d1 migrations apply dbms --remote",
     "typecheck": "tsc --noEmit"
   },

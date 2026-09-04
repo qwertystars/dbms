@@ -120,6 +120,44 @@ describe("auth", () => {
     const anon = await req("/api/me");
     expect(anon.status).toBe(401);
   });
+
+  it("error edges return JSON {message} shape (never bare status / 500)", async () => {
+    // duplicate signup -> 409 {message}
+    const dup = { email: `shape-${Date.now()}@x.local`, name: "D", password: "pw123456789" };
+    await req("/api/signup", { method: "POST", body: dup });
+    const dupRes = await req("/api/signup", { method: "POST", body: dup });
+    expect(dupRes.status).toBe(409);
+    expect(typeof dupRes.json.message).toBe("string");
+    // bad password -> 401 {message}
+    const bad = await req("/api/login", {
+      method: "POST",
+      body: { email: dup.email, password: "wrongpassword" },
+    });
+    expect(bad.status).toBe(401);
+    expect(typeof bad.json.message).toBe("string");
+    // unauthenticated /api/me -> 401 {message}
+    const anon = await req("/api/me");
+    expect(anon.status).toBe(401);
+    expect(typeof anon.json.message).toBe("string");
+    // photo upload without B2 creds -> 503 {message} (server currently returns {error})
+    const { creator, treeId } = await fixtureTree();
+    const person = await req(`/api/trees/${treeId}/persons`, {
+      method: "POST",
+      cookie: creator,
+      body: { name: "Shape", gender: "m" },
+    });
+    expect(person.status).toBe(201);
+    const pid = person.json.person.person_id as string;
+    const form = new FormData();
+    form.set("file", new File(["bytes"], "a.png", { type: "image/png" }));
+    const photo = await app.fetch(
+      new Request(`https://test.local/api/persons/${pid}/photo`, { method: "POST", headers: { cookie: creator }, body: form }),
+      env,
+    );
+    expect(photo.status).toBe(503);
+    const photoJson = (await photo.json()) as Record<string, unknown>;
+    expect(typeof photoJson.message).toBe("string");
+  });
 });
 
 describe("trees + RBAC (SC3)", () => {
@@ -414,6 +452,46 @@ describe("person DELETE + tree delete with linked users", () => {
     });
     const del = await req(`/api/trees/${treeId}`, { method: "DELETE", cookie: creator });
     expect(del.status).toBe(200);
+  });
+
+  it("deleting a person linked as users.person_id nulls the link instead of FK-500", async () => {
+    const { creator, treeId } = await fixtureTree();
+    const editor = await joinAs(creator, treeId, "editor");
+    const p = await req(`/api/trees/${treeId}/persons`, {
+      method: "POST", cookie: editor, body: { name: "ProfileLink", gender: "f" },
+    });
+    const pid = p.json.person.person_id as string;
+    // a user whose profile links to this person (the reachable FK risk)
+    const u = await req("/api/signup", {
+      method: "POST",
+      body: { email: `profile-${Date.now()}@t.local`, name: "P", password: "hunter2secret", person_id: pid },
+    });
+    expect(u.status).toBe(201);
+    const del = await req(`/api/persons/${pid}`, { method: "DELETE", cookie: editor });
+    expect(del.status).toBe(200);
+    const gone = await req(`/api/persons/${pid}`, { cookie: editor });
+    expect(gone.status).toBe(404);
+  });
+
+  it("couple create rejects a partner from ANOTHER tree (400, not a cross-tree FK state)", async () => {
+    const { creator, treeId } = await fixtureTree();
+    const editor = await joinAs(creator, treeId, "editor");
+    const p = await req(`/api/trees/${treeId}/persons`, {
+      method: "POST", cookie: editor, body: { name: "Mine", gender: "m" },
+    });
+    const other = await req("/api/trees", {
+      method: "POST", cookie: creator, body: { name: "Other" },
+    });
+    const otherTree = other.json.tree.tree_id as string;
+    const otherP = await req(`/api/trees/${otherTree}/persons`, {
+      method: "POST", cookie: creator, body: { name: "Theirs", gender: "f" },
+    });
+    const cpl = await req(`/api/trees/${otherTree}/couples`, {
+      method: "POST", cookie: creator,
+      body: { partner_a: p.json.person.person_id as string, partner_b: otherP.json.person.person_id as string },
+    });
+    expect(cpl.status).toBe(400);
+    expect((cpl.json as { message: string }).message).toContain("not in this tree");
   });
 
   it("generations terminates on accidental couple cycles (lvl capped)", async () => {

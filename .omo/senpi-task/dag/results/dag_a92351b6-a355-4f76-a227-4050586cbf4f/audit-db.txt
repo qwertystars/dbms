@@ -1,0 +1,12 @@
+Report written and verified: `/tmp/dbms-audit-db.md` exists, contains a numbered findings list, 824 words (~1.1k tokens, under the 5k bound), 9 findings.
+
+**Findings count: 9** — 1 CRITICAL, 3 HIGH, 3 MEDIUM, 2 LOW.
+
+The three runtime-500 findings (all FK-related, all confirmed by reading `app.ts` against the schema's plain `REFERENCES` with no `ON DELETE` actions):
+1. **CRITICAL** — `src/server/app.ts:167` tree delete: nulls `users.person_id` but not `couple.partner_a/b` before deleting persons → FK failure → 500 when a tree's persons are partners in another tree's couple.
+2. **HIGH** — `src/server/app.ts:268` person delete: partner-nulling `UPDATE`s aren't scoped to the person's tree, so deleting a cross-tree partner → FK failure → 500.
+3. **HIGH** — `migrations/0001_init.sql:13` `users.person_id` FK: no `ON DELETE` action and no cleanup in the person-delete path → 500 when deleting a user's linked person.
+
+Plus: non-idempotent seed (`0002` re-run fails on `users.email` UNIQUE — verified empirically), the `Married 2039`/dob `2040-05-05` seed inconsistency, missing `ON DELETE` on `couple`/`child_of` FKs, and two LOW test-quality items.
+
+Verified: both migrations apply cleanly to a fresh in-memory SQLite, all 132 kin_term rows satisfy the CHECKs, and the seed's canonical-key coverage is complete, so no other seed/schema violations exist.

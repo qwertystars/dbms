@@ -1,0 +1,5 @@
+HTTP/1.1 200 OK
+Content-Length: 148
+Content-Type: application/json
+
+{"user":{"user_id":"b526b97f-328c-4ee0-8e1d-edd76dfb107b","email":"qa-final-1787642844@example.com","name":"QA Final","lang":"en","person_id":null}}

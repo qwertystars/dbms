@@ -85,6 +85,13 @@ async function requireAccess(
 
 const app = new Hono<AppEnv>();
 
+// Unhandled handler throws must still honor the JSON {message} contract
+// (project convention: never bare status codes).
+app.onError((err, c) => {
+  console.error("unhandled error:", err);
+  return c.json({ message: "internal server error" }, 500);
+});
+
 app.use("/api/*", async (c, next) => {
   c.set("user", await currentUser(c));
   await next();
@@ -211,6 +218,10 @@ app.delete("/api/trees/:id", async (c) => {
   await c.env.DB.batch([
     c.env.DB.prepare("UPDATE users SET person_id = NULL WHERE person_id IN (SELECT person_id FROM person WHERE tree_id = ?)").bind(treeId),
     c.env.DB.prepare("DELETE FROM child_of WHERE couple_id IN (SELECT couple_id FROM couple WHERE tree_id = ?)").bind(treeId),
+    // release partner slots BEFORE deleting persons: a person of this tree may
+    // be a partner in a couple of ANOTHER tree -> FK 500 otherwise
+    c.env.DB.prepare("UPDATE couple SET partner_a = NULL WHERE partner_a IN (SELECT person_id FROM person WHERE tree_id = ?)").bind(treeId),
+    c.env.DB.prepare("UPDATE couple SET partner_b = NULL WHERE partner_b IN (SELECT person_id FROM person WHERE tree_id = ?)").bind(treeId),
     c.env.DB.prepare("DELETE FROM couple WHERE tree_id = ?").bind(treeId),
     c.env.DB.prepare("DELETE FROM person WHERE tree_id = ?").bind(treeId),
     c.env.DB.prepare("DELETE FROM tree_access WHERE tree_id = ?").bind(treeId),
@@ -366,7 +377,7 @@ app.post("/api/persons/:pid/photo", async (c) => {
     return c.json({ photo_url });
   } catch (e) {
     if (e instanceof B2ConfigError) {
-      return c.json({ error: "b2_not_configured", message: e.message }, 503);
+      return bad(c, 503, e.message, { error: "b2_not_configured" });
     }
     throw e;
   }
@@ -380,9 +391,12 @@ app.delete("/api/persons/:pid", async (c) => {
   if (!row) return bad(c, 404, "person not found");
   const access = await requireAccess(c, row.tree_id, "editor");
   if (access instanceof Response) return access;
-  // release references first: child links, partner slots, then the row
+  // release references first: child links, partner slots (in ANY tree, since
+  // a person may be a partner in a couple of another tree), then the row;
+  // also release users.person_id so the FK doesn't 500 on a direct delete
   await c.env.DB.batch([
     c.env.DB.prepare("DELETE FROM child_of WHERE child_person_id = ?").bind(pid),
+    c.env.DB.prepare("UPDATE users SET person_id = NULL WHERE person_id = ?").bind(pid),
     c.env.DB.prepare("UPDATE couple SET partner_a = NULL WHERE partner_a = ?").bind(pid),
     c.env.DB.prepare("UPDATE couple SET partner_b = NULL WHERE partner_b = ?").bind(pid),
     c.env.DB.prepare("DELETE FROM person WHERE person_id = ?").bind(pid),

@@ -5,6 +5,7 @@ const banner = document.getElementById('banner');
 const overlay = document.getElementById('overlay');
 
 let ME = null;
+let justSignedUp = false;
 
 // ---------- utilities ----------
 
@@ -31,7 +32,7 @@ async function api(path, opts = {}) {
   const ct = res.headers.get('content-type') || '';
   if (ct.includes('application/json')) data = await res.json();
   if (!res.ok) {
-    const err = new Error((data && data.error) || ('HTTP ' + res.status));
+    const err = new Error((data && (data.message || data.error)) || ('HTTP ' + res.status));
     err.status = res.status;
     throw err;
   }
@@ -122,6 +123,8 @@ async function renderLogin() {
 
   const tabL = document.getElementById('tab-login');
   const tabS = document.getElementById('tab-signup');
+  const fLogin = document.getElementById('f-login');
+  const fSignup = document.getElementById('f-signup');
   tabL.onclick = () => { tabL.classList.add('active'); tabS.classList.remove('active'); fLogin.classList.remove('hidden'); fSignup.classList.add('hidden'); };
   tabS.onclick = () => { tabS.classList.add('active'); tabL.classList.remove('active'); fSignup.classList.remove('hidden'); fLogin.classList.add('hidden'); };
 
@@ -129,6 +132,7 @@ async function renderLogin() {
     ev.preventDefault();
     const fd = new FormData(ev.target);
     try {
+      banner.classList.add('hidden');
       ME = (await api('/api/login', { method: 'POST', body: Object.fromEntries(fd) })).user;
       location.hash = '#/trees';
     } catch (e) { showBanner(e.message); }
@@ -137,8 +141,10 @@ async function renderLogin() {
     ev.preventDefault();
     const fd = new FormData(ev.target);
     try {
+      banner.classList.add('hidden');
       await api('/api/signup', { method: 'POST', body: Object.fromEntries(fd) });
       ME = (await api('/api/login', { method: 'POST', body: Object.fromEntries(fd) })).user;
+      justSignedUp = true;
       location.hash = '#/trees';
     } catch (e) { showBanner(e.message); }
   };
@@ -151,6 +157,11 @@ async function renderTrees() {
     try { ME = (await api('/api/me')).user; } catch (e) { ME = null; }
   }
   if (!ME) { location.hash = '#/login'; return; }
+
+  if (justSignedUp) {
+    justSignedUp = false;
+    showBanner('Account created — welcome to Kutumb!');
+  }
 
   const data = await api('/api/trees');
   app.innerHTML = `

@@ -1,0 +1,5 @@
+$ node -e "better-sqlite3 readonly open .wrangler/state/v3/d1/miniflare-D1DatabaseObject/<id>.sqlite"
+TABLES: []
+users query failed: no such table: users
+count failed: no such table: users
+(sqlite file created 12:43; dev server started 12:38 - DB postdates server, never migrated)

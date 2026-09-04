@@ -1,0 +1,8 @@
+[wrangler:info] POST /api/login 500 Internal Server Error (26ms)
+✘ [ERROR] Error: D1_ERROR: no such table: users: SQLITE_ERROR
+    at D1DatabaseSessionAlwaysPrimary._sendOrThrow (cloudflare-internal:d1-api:188:19)
+    [cause]: Error: no such table: users: SQLITE_ERROR
+        at D1DatabaseSessionAlwaysPrimary._sendOrThrow (cloudflare-internal:d1-api:189:24)
+        at null.<anonymous> (async file:///home/srijan/Documents/projects/dbms/.wrangler/tmp/dev-RH6uIa/index.js:2776:15)
+        at async dispatch (hono compose.js:22:17)
+        at async jsonError (middleware-miniflare3-json-error.ts:22:10)
