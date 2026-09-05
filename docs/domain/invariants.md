@@ -9,6 +9,7 @@ These properties must remain true regardless of UI behavior.
 **Scope:** Family, FamilyMembership
 
 **Enforced by:**
+
 - transactional family creation/ownership transfer
 - database uniqueness where feasible
 - service-layer validation
@@ -20,6 +21,7 @@ These properties must remain true regardless of UI behavior.
 **Statement:** An account must never read or mutate private data belonging to a family without an active membership, except narrowly scoped invitation flows.
 
 **Enforced by:**
+
 - server authorization policy
 - family-scoped repository queries
 - API integration tests
@@ -63,6 +65,7 @@ These properties must remain true regardless of UI behavior.
 **Enforced by:** transactional cycle detection before edge insertion/update.
 
 **Verification:**
+
 - direct cycle
 - multi-hop cycle
 - concurrent insertion tests

@@ -1,0 +1,56 @@
+{
+  "name": "family-social-network",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "format:check": "prettier --check .",
+    "format": "prettier --write .",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
+    "db:push": "drizzle-kit push",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:test:up": "docker compose -f docker-compose.test.yml up -d",
+    "db:test:down": "docker compose -f docker-compose.test.yml down"
+  },
+  "dependencies": {
+    "@hono/zod-validator": "0.2.2",
+    "dotenv": "16.4.5",
+    "drizzle-orm": "0.30.9",
+    "drizzle-zod": "0.5.1",
+    "hono": "4.4.6",
+    "jose": "5.2.4",
+    "nanoid": "5.0.7",
+    "next": "14.2.35",
+    "pg": "8.11.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "zod": "3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "20.12.0",
+    "@types/pg": "8.11.5",
+    "@types/react": "18.3.3",
+    "@types/react-dom": "18.3.0",
+    "@vitejs/plugin-react": "4.3.0",
+    "concurrently": "8.2.2",
+    "drizzle-kit": "0.21.4",
+    "eslint": "8.57.0",
+    "eslint-config-next": "14.2.35",
+    "prettier": "3.3.2",
+    "tsx": "4.7.2",
+    "typescript": "5.4.5",
+    "vitest": "1.6.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

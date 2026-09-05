@@ -22,23 +22,23 @@ Within one family, an account has exactly one active membership.
 
 ## Permission matrix
 
-| Action | Creator | Editor | Viewer |
-|---|---:|---:|---:|
-| View family | Yes | Yes | Yes |
-| View tree | Yes | Yes | Yes |
-| Export visible family data | Yes | Yes | Yes |
-| Create person | Yes | Yes | No |
-| Edit person | Yes | Yes | No |
-| Delete person | Yes | No | No |
-| Add parent/child relationship | Yes | Yes | No |
-| Correct/remove parent/child relationship | Yes | Yes | No |
-| Invite member | Yes | No | No |
-| Change member role | Yes | No | No |
-| Remove member | Yes | No | No |
-| Transfer ownership | Yes | No | No |
-| Delete family | Yes | No | No |
-| Create family post | Yes | Yes | Yes |
-| Comment/react | Yes | Yes | Yes |
+| Action                                   | Creator | Editor | Viewer |
+| ---------------------------------------- | ------: | -----: | -----: |
+| View family                              |     Yes |    Yes |    Yes |
+| View tree                                |     Yes |    Yes |    Yes |
+| Export visible family data               |     Yes |    Yes |    Yes |
+| Create person                            |     Yes |    Yes |     No |
+| Edit person                              |     Yes |    Yes |     No |
+| Delete person                            |     Yes |     No |     No |
+| Add parent/child relationship            |     Yes |    Yes |     No |
+| Correct/remove parent/child relationship |     Yes |    Yes |     No |
+| Invite member                            |     Yes |     No |     No |
+| Change member role                       |     Yes |     No |     No |
+| Remove member                            |     Yes |     No |     No |
+| Transfer ownership                       |     Yes |     No |     No |
+| Delete family                            |     Yes |     No |     No |
+| Create family post                       |     Yes |    Yes |    Yes |
+| Comment/react                            |     Yes |    Yes |    Yes |
 
 The sketch gives Editor "add + edit". Removing an incorrect relationship is treated as tree editing, but deleting a person record remains Creator-only.
 

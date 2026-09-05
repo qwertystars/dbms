@@ -24,8 +24,8 @@ The sketch clearly indicates:
 
 Profile labels visible in the sketch include:
 
-- Name *
-- Gender *
+- Name \*
+- Gender \*
 - D.O.B
 - D.O.D
 - Height
