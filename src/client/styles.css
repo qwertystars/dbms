@@ -508,6 +508,14 @@ a.list-item:hover {
   font-size: 0.825rem;
 }
 
+.select-sm {
+  width: auto;
+  min-height: 30px;
+  height: 30px;
+  padding: 0 8px;
+  font-size: 0.825rem;
+}
+
 .btn-lg {
   height: 46px;
   padding: 0 22px;

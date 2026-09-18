@@ -27,6 +27,7 @@ export function FamilyPage() {
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [personBusy, runPerson] = useBusy();
   const [inviteBusy, runInvite] = useBusy();
+  const [memberBusy, runMember] = useBusy();
 
   async function load() {
     const family = await api("GET", `/api/v1/families/${familyId}`);
@@ -66,6 +67,34 @@ export function FamilyPage() {
     } else {
       setError(res ? errorMessage(res, "Could not create invitation.") : null);
     }
+  }
+
+  async function updateRole(membershipId: string, role: string) {
+    const res = await runMember(() =>
+      api("PATCH", `/api/v1/families/${familyId}/members/${membershipId}`, { role }),
+    );
+    if (!res || res.status !== 200) {
+      setError(res ? errorMessage(res, "Could not update the role.") : null);
+      return;
+    }
+    setError(null);
+    setNotice("Member role updated.");
+    await load();
+  }
+
+  async function removeMember(member: any) {
+    const name = member.account?.displayName || "this member";
+    if (!window.confirm(`Remove ${name} from the family?`)) return;
+    const res = await runMember(() =>
+      api("DELETE", `/api/v1/families/${familyId}/members/${member.id}`),
+    );
+    if (!res || res.status !== 200) {
+      setError(res ? errorMessage(res, "Could not remove the member.") : null);
+      return;
+    }
+    setError(null);
+    setNotice(`${name} was removed.`);
+    await load();
   }
 
   async function createPerson(e: SubmitEvent<HTMLFormElement>) {
@@ -231,7 +260,30 @@ export function FamilyPage() {
                         {m.accountId === me?.id && <span className="subtle"> (you)</span>}
                       </div>
                     </div>
-                    <RoleBadge role={m.role} />
+                    {role === "CREATOR" && m.role !== "CREATOR" ? (
+                      <div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
+                        <select
+                          className="select select-sm"
+                          value={m.role}
+                          disabled={memberBusy}
+                          aria-label={`Role for ${m.account?.displayName || "member"}`}
+                          onChange={(e) => void updateRole(m.id, e.target.value)}
+                        >
+                          <option value="EDITOR">Editor</option>
+                          <option value="VIEWER">Viewer</option>
+                        </select>
+                        <button
+                          type="button"
+                          className="post-action post-action-danger"
+                          disabled={memberBusy}
+                          onClick={() => void removeMember(m)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ) : (
+                      <RoleBadge role={m.role} />
+                    )}
                   </li>
                 ))}
               </ul>

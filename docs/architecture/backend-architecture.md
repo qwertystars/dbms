@@ -134,11 +134,13 @@ Typical family mutation:
 3. Authentication resolves internal Account.
 4. Family authorization policy loads active membership.
 5. Application service executes domain rules.
-6. Repository writes inside a transaction when required.
-7. Audit event is appended inside or immediately after the successful transaction according to consistency need.
+6. Repository writes inside an atomic batch when multiple writes must commit together.
+7. Audit event is appended inside the same batch so the mutation and its audit trail commit together.
 8. Response is serialized through a contract schema.
 
 Routes must not contain business logic beyond request adaptation.
+
+Cloudflare D1 does not support interactive transactions; service code uses `db.batch([...])` (atomic on D1, transactional on the local libsql client) instead.
 
 ## Authorization model
 
@@ -284,6 +286,7 @@ src/
     social/
     friends/
     media/
+    events/
     audit/
   shared/
     errors/

@@ -38,6 +38,8 @@ The frontend is a Vite + React single-page application and the backend is a stan
 - JSON and CSV family export with audit logging.
 - Web UI (Vite + React SPA under `src/client/`, React Router): `/sign-in`, `/app` dashboard, family list, family detail, person detail, tree view, feed view, friends, and invitation acceptance. All data flows through the Hono API using the `auth_token` cookie.
 - Feed UI: post composer, four emoji reactions with live counts, expandable comment threads with author names, edit/delete for own posts, and Creator moderation of posts and comments.
+- Person profile UI: edit form (name, gender, life dates, occupation, contact details, height, weight, biography) for Creators and Editors, and Creator-only delete with confirmation. Deletion is a soft delete that also detaches family-tree links.
+- Member management UI: Creators can change member roles between Editor and Viewer and remove members.
 - Dashboard: family cards plus a "Coming up" card showing birthdays and remembrances in the next 60 days with relative dates.
 - Hardening: request logging, 100 req/minute per-account/IP rate limiting, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` headers.
 - Cloudflare deployment ready:
@@ -129,7 +131,7 @@ Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF
 None required for v1.0. Optional follow-ups:
 
 - Replace dev sign-in with real OIDC/OAuth onboarding for production use.
-- Add controls for existing API features not yet in the UI: editing/deleting people, removing relationships, member role management, ownership transfer, and family editing/deletion.
+- Add controls for existing API features not yet in the UI: removing relationships, ownership transfer, and family editing/deletion.
 - Add e2e tests (Playwright/Cypress).
 - Move rate limiting to Durable Objects or another shared store for multi-instance deployments.
 - Implement media uploads against the `MEDIA_BUCKET` R2 binding and return real presigned URLs.
