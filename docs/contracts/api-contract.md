@@ -223,11 +223,14 @@ Role: any family member.
 
 ### API-POST-02
 
-`GET /families/{familyId}/posts?cursor=...`
+`GET /families/{familyId}/posts?cursor=...&limit=...`
 
 Role: any family member.
 
-Cursor pagination required.
+Cursor pagination required. `limit` defaults to 20 (max 50). The cursor combines the post
+timestamp and id, so posts created within the same second are not skipped. Each post
+includes `author` (id and displayName), `reactionCounts`, `commentCount`, and the
+requesting account's `myReaction`.
 
 ### API-POST-03
 
@@ -272,6 +275,19 @@ Body:
 ### API-REACT-02
 
 `DELETE /families/{familyId}/posts/{postId}/reaction`
+
+## Events
+
+### API-EVENT-01
+
+`GET /events/upcoming?days=45`
+
+Role: any authenticated account.
+
+Returns birthdays and memorial anniversaries from every family the account belongs to,
+within the next `days` days (1-365, default 45), sorted by `daysUntil`. Each event includes
+`familyId`, `familyName`, `personId`, `personName`, `type` (`birthday` or `memorial`),
+`date`, `daysUntil`, and `age` (turning age or years since passing, when known).
 
 ## Friends
 
@@ -330,7 +346,8 @@ Body includes:
 - MIME type
 - size
 
-Returns short-lived upload instructions.
+Returns short-lived upload instructions. The current implementation returns a placeholder
+local path; S3-compatible/R2 uploads are not wired up yet (see `current-state.md`).
 
 ### API-MEDIA-02
 

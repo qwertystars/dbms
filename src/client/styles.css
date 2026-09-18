@@ -1035,21 +1035,23 @@ a.person-node:hover {
 
 /* ---------- Feed ---------- */
 
-.post-head {
+.feed {
+  max-width: 680px;
+  margin: 0 auto;
   display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
+  flex-direction: column;
+  gap: 20px;
 }
 
-.post-author {
-  font-weight: 600;
-  line-height: 1.2;
+.composer-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
 }
 
-.post-body {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+.composer-field {
+  flex: 1;
+  min-width: 0;
 }
 
 .composer .textarea {
@@ -1066,7 +1068,332 @@ a.person-node:hover {
 
 .composer-footer {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding-top: 12px;
+  margin-top: 4px;
   border-top: 1px solid var(--border);
+}
+
+.post {
+  padding: 18px 20px;
+}
+
+.post-inner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.post-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.post-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.post-meta {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 5px;
+  color: var(--text-subtle);
+  font-size: 0.85rem;
+}
+
+.post-author {
+  font-weight: 600;
+  font-size: 0.925rem;
+  color: var(--text);
+}
+
+.post-dot {
+  color: var(--text-subtle);
+}
+
+.post-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.975rem;
+}
+
+.post-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 8px;
+}
+
+.post-edit .textarea {
+  min-height: 80px;
+}
+
+.post-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.post-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-subtle);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 550;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
+}
+
+.post-action:hover {
+  background: var(--surface-muted);
+  color: var(--text);
+}
+
+.post-action-danger:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.post-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.reactions {
+  display: flex;
+  gap: 4px;
+}
+
+.reaction {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform 0.12s,
+    border-color 0.15s,
+    background 0.15s,
+    color 0.15s;
+}
+
+.reaction:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+
+.reaction.active {
+  background: var(--primary-soft);
+  color: var(--primary);
+  border-color: color-mix(in srgb, var(--primary) 35%, transparent);
+}
+
+.reaction-emoji {
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.reaction-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.comments {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+
+.comment-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.comment {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.comment-bubble {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--surface-muted);
+}
+
+.comment-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.comment-author {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.comment-head time {
+  font-size: 0.78rem;
+}
+
+.comment-delete {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--text-subtle);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.comment-delete:hover {
+  color: var(--danger);
+  text-decoration: underline;
+}
+
+.comment-body {
+  margin-top: 2px;
+  font-size: 0.9rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.comment-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.comment-form .input {
+  border-radius: 999px;
+}
+
+.comments .loading {
+  padding: 12px 0;
+}
+
+/* ---------- Events ---------- */
+
+.event-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.event {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.event:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.event-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+}
+
+.event-birthday {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.event-memorial {
+  background: var(--surface-muted);
+  color: var(--text-muted);
+}
+
+.event-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.event-name {
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.event-meta {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.event-when {
+  display: flex;
+  flex-direction: column;
+  text-align: right;
+}
+
+.event-relative {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--primary);
+}
+
+.event-date {
+  color: var(--text-subtle);
+  font-size: 0.78rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reaction:hover {
+    transform: none;
+  }
 }

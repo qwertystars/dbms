@@ -3,20 +3,20 @@ import { useParams } from "react-router-dom";
 import { api, errorMessage } from "~/client/api";
 import { useAuth } from "~/client/auth";
 import { FamilyHeader } from "~/client/components/FamilyNav";
-import {
-  Alert,
-  Avatar,
-  EmptyState,
-  ErrorState,
-  Loading,
-  timeAgo,
-  useBusy,
-} from "~/client/components/ui";
+import { PostCard, type FeedPost } from "~/client/components/PostCard";
+import { Alert, Avatar, EmptyState, ErrorState, Loading, useBusy } from "~/client/components/ui";
+
+interface FeedData {
+  family: any;
+  role: string;
+  posts: FeedPost[];
+  nextCursor?: string;
+}
 
 export function FeedPage() {
   const { familyId } = useParams<{ familyId: string }>();
   const { me } = useAuth();
-  const [data, setData] = useState<any | null>(null);
+  const [data, setData] = useState<FeedData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [posting, runPost] = useBusy();
   const [loadingMore, runMore] = useBusy();
@@ -27,19 +27,12 @@ export function FeedPage() {
       setError(errorMessage(family, "Family not found."));
       return;
     }
-    const [feed, members] = await Promise.all([
-      api("GET", `/api/v1/families/${familyId}/posts`),
-      api("GET", `/api/v1/families/${familyId}/members`),
-    ]);
-    const names = new Map<string, string>(
-      (members.body.members || []).map((m: any) => [m.accountId, m.account?.displayName]),
-    );
+    const feed = await api("GET", `/api/v1/families/${familyId}/posts`);
     setData({
       family: family.body.family,
       role: family.body.membership.role,
       posts: feed.body.posts || [],
       nextCursor: feed.body.nextCursor,
-      names,
     });
   }
 
@@ -70,25 +63,40 @@ export function FeedPage() {
     const res = await runMore(() =>
       api(
         "GET",
-        `/api/v1/families/${familyId}/posts?cursor=${encodeURIComponent(data.nextCursor)}`,
+        `/api/v1/families/${familyId}/posts?cursor=${encodeURIComponent(data.nextCursor!)}`,
       ),
     );
     if (!res || res.status !== 200) {
       setError(res ? errorMessage(res, "Could not load older posts.") : null);
       return;
     }
-    setData((prev: any) => ({
-      ...prev,
-      posts: [...prev.posts, ...(res.body.posts || [])],
-      nextCursor: res.body.nextCursor,
-    }));
+    setData((prev) =>
+      prev
+        ? {
+            ...prev,
+            posts: [...prev.posts, ...(res.body.posts || [])],
+            nextCursor: res.body.nextCursor,
+          }
+        : prev,
+    );
+  }
+
+  function patchPost(postId: string, patch: Partial<FeedPost>) {
+    setData((prev) =>
+      prev
+        ? { ...prev, posts: prev.posts.map((p) => (p.id === postId ? { ...p, ...patch } : p)) }
+        : prev,
+    );
+  }
+
+  function removePost(postId: string) {
+    setData((prev) =>
+      prev ? { ...prev, posts: prev.posts.filter((p) => p.id !== postId) } : prev,
+    );
   }
 
   if (error && !data) return <ErrorState title="Could not open this family" message={error} />;
   if (!data) return <Loading />;
-
-  const authorName = (id: string) =>
-    data.names.get(id) || (id === me?.id ? me?.displayName : null) || "Former member";
 
   return (
     <>
@@ -100,13 +108,13 @@ export function FeedPage() {
         description="Updates shared with everyone in this family."
       />
 
-      <div className="stack" style={{ maxWidth: 680 }}>
+      <div className="feed">
         {error && <Alert onClose={() => setError(null)}>{error}</Alert>}
 
         <form onSubmit={createPost} className="card card-body composer">
-          <div className="row" style={{ alignItems: "flex-start", flexWrap: "nowrap" }}>
+          <div className="composer-row">
             <Avatar name={me?.displayName} />
-            <label style={{ flex: 1 }}>
+            <label className="composer-field">
               <span className="visually-hidden">New post</span>
               <textarea
                 className="textarea"
@@ -118,8 +126,9 @@ export function FeedPage() {
             </label>
           </div>
           <div className="composer-footer">
+            <span className="subtle">Photos, milestones and everyday moments all belong here.</span>
             <button type="submit" className="btn btn-primary" disabled={posting}>
-              {posting ? "Posting…" : "Post"}
+              {posting ? "Posting…" : "Share"}
             </button>
           </div>
         </form>
@@ -129,28 +138,18 @@ export function FeedPage() {
             <EmptyState title="No posts yet">Be the first to share an update.</EmptyState>
           </div>
         ) : (
-          data.posts.map((post: any) => {
-            const name = authorName(post.authorAccountId);
-            const created = new Date(post.createdAt);
-            return (
-              <article key={post.id} className="card card-body">
-                <div className="post-head">
-                  <Avatar name={name} />
-                  <div>
-                    <div className="post-author">{name}</div>
-                    <time
-                      className="subtle"
-                      dateTime={created.toISOString()}
-                      title={created.toLocaleString()}
-                    >
-                      {timeAgo(created)}
-                    </time>
-                  </div>
-                </div>
-                <p className="post-body">{post.body}</p>
-              </article>
-            );
-          })
+          data.posts.map((post) => (
+            <PostCard
+              key={post.id}
+              familyId={familyId!}
+              post={post}
+              me={me}
+              role={data.role}
+              onPatch={patchPost}
+              onRemove={removePost}
+              onError={setError}
+            />
+          ))
         )}
 
         {data.nextCursor && (

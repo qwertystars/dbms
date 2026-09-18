@@ -15,7 +15,7 @@ pnpm db:migrate        # creates dev.db
 pnpm dev               # API on :3000, web app on http://localhost:5173
 ```
 
-Open http://localhost:5173 and use the development sign-in (any user ID works).
+Open http://localhost:5173 and use the development sign-in (any user ID works). `pnpm dev` sets `AUTH_DEV_MODE=true`; without it the sign-in route is disabled, which is the default in production.
 
 Checks: `pnpm format:check && pnpm lint && pnpm type-check && pnpm test`.
 
@@ -36,6 +36,8 @@ The target application also includes:
 - parent/child relationships
 - a visual family tree
 - private family posts, comments, and reactions
+- a chronological feed with author names, reaction counts, and comment threads
+- birthday and remembrance reminders built from existing family-tree dates
 - account-to-account friend connections
 - family invitations
 - family-data export

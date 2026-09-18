@@ -260,6 +260,28 @@ export function timeAgo(value: string | number | Date): string {
   return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
+/** "Today", "Tomorrow", "In 3 days", "In 2 weeks" for a day offset. */
+export function relativeDay(daysUntil: number): string {
+  if (daysUntil <= 0) return "Today";
+  if (daysUntil === 1) return "Tomorrow";
+  if (daysUntil < 7) return `In ${daysUntil} days`;
+  if (daysUntil < 14) return "In 1 week";
+  if (daysUntil < 60) return `In ${Math.round(daysUntil / 7)} weeks`;
+  return `In ${Math.round(daysUntil / 30)} months`;
+}
+
+/** Short "7 Sep" label for an ISO date string without timezone shifts. */
+export function shortDate(value: string | null | undefined): string {
+  if (!value) return "";
+  const [y, m, d] = value.split("-").map(Number);
+  if (!y || !m || !d) return value;
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 export function capitalize(value: string | null | undefined): string {
   if (!value) return "";
   return value.charAt(0).toUpperCase() + value.slice(1);
@@ -289,6 +311,39 @@ const iconPaths: Record<string, ReactNode> = {
       <path d="M8 11V8a4 4 0 0 1 8 0v3" />
     </>
   ),
+  cake: (
+    <>
+      <path d="M4.5 12.5h15V20h-15z" />
+      <path d="M4.5 16c1.6 1.1 2.7 1.1 4.3 0s2.6-1.1 4.2 0 2.7 1.1 4.3 0" />
+      <path d="M12 12.5V8.5" />
+      <circle cx="12" cy="6.2" r="1.3" />
+    </>
+  ),
+  candle: (
+    <>
+      <path d="M9 12h6v8H9z" />
+      <path d="M12 12V9.5" />
+      <path d="M12 6.5c1.1 1.1 1.1 2.1 0 3.2-1.1-1.1-1.1-2.1 0-3.2z" />
+    </>
+  ),
+  calendar: (
+    <>
+      <rect x="3.5" y="5" width="17" height="15.5" rx="2" />
+      <path d="M3.5 9.5h17M8 3.5v3M16 3.5v3" />
+    </>
+  ),
+  pencil: (
+    <>
+      <path d="M4 20h4l10-10-4-4L4 16z" />
+      <path d="M13.5 6.5l4 4" />
+    </>
+  ),
+  trash: (
+    <>
+      <path d="M4 7h16M9 7V5h6v2M6.5 7l1 13h9l1-13" />
+    </>
+  ),
+  sparkle: <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />,
 };
 
 export function Icon({ name, size = 18 }: { name: keyof typeof iconPaths; size?: number }) {

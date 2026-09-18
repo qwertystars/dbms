@@ -1,12 +1,34 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api, errorMessage } from "~/client/api";
 import { useAuth } from "~/client/auth";
 import { CreateFamilyForm, FamilyCard } from "~/client/components/families";
-import { Alert, Card, EmptyState, Loading, PageHeader } from "~/client/components/ui";
+import {
+  Alert,
+  Card,
+  EmptyState,
+  Icon,
+  Loading,
+  PageHeader,
+  relativeDay,
+  shortDate,
+} from "~/client/components/ui";
+
+interface UpcomingEvent {
+  familyId: string;
+  familyName: string;
+  personId: string;
+  personName: string;
+  type: "birthday" | "memorial";
+  date: string;
+  daysUntil: number;
+  age: number | null;
+}
 
 export function DashboardPage() {
   const { me } = useAuth();
   const [families, setFamilies] = useState<any[] | null>(null);
+  const [events, setEvents] = useState<UpcomingEvent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -16,6 +38,9 @@ export function DashboardPage() {
         setFamilies([]);
         setError(errorMessage(res, "Could not load families."));
       }
+    });
+    api("GET", "/api/v1/events/upcoming?days=60").then((res) => {
+      setEvents(res.status === 200 ? res.body.events || [] : []);
     });
   }, []);
 
@@ -53,6 +78,54 @@ export function DashboardPage() {
           )}
         </div>
         <div className="stack">
+          <Card title="Coming up" description="Birthdays and remembrances, 60 days ahead.">
+            {events === null ? (
+              <Loading label="Loading dates…" />
+            ) : events.length === 0 ? (
+              <div className="empty" style={{ padding: "16px 0" }}>
+                <p className="empty-title">Nothing on the horizon</p>
+                <p>Add birthdays to your family tree to see them here.</p>
+              </div>
+            ) : (
+              <>
+                <ul className="event-list">
+                  {events.slice(0, 6).map((event) => (
+                    <li key={`${event.personId}-${event.type}`} className="event">
+                      <span className={`event-icon event-${event.type}`}>
+                        <Icon name={event.type === "birthday" ? "cake" : "candle"} size={18} />
+                      </span>
+                      <div className="event-main">
+                        <Link
+                          className="event-name"
+                          to={`/app/families/${event.familyId}/people/${event.personId}`}
+                        >
+                          {event.personName}
+                        </Link>
+                        <span className="event-meta">
+                          {event.type === "birthday"
+                            ? event.age
+                              ? `Turns ${event.age} · ${event.familyName}`
+                              : `Birthday · ${event.familyName}`
+                            : event.age
+                              ? `${event.age} years · ${event.familyName}`
+                              : `Remembrance · ${event.familyName}`}
+                        </span>
+                      </div>
+                      <div className="event-when">
+                        <span className="event-relative">{relativeDay(event.daysUntil)}</span>
+                        <span className="event-date">{shortDate(event.date)}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                {events.length > 6 && (
+                  <p className="subtle" style={{ marginTop: 10 }}>
+                    {events.length - 6} more in the next 60 days.
+                  </p>
+                )}
+              </>
+            )}
+          </Card>
           <Card title="Create a family" description="You will be its creator.">
             <CreateFamilyForm onError={setError} />
           </Card>

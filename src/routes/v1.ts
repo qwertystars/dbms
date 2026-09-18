@@ -28,6 +28,7 @@ import * as socialService from "~/modules/social/service";
 import * as friendsService from "~/modules/friends/service";
 import * as mediaService from "~/modules/media/service";
 import * as exportService from "~/modules/export/service";
+import * as eventsService from "~/modules/events/service";
 import type { Account } from "~/lib/context";
 import { getFamily } from "~/modules/families/service";
 
@@ -53,6 +54,18 @@ app.get("/me", (c) => {
     avatarMediaId: account.avatarMediaId,
     createdAt: account.createdAt,
   });
+});
+
+// Events
+const upcomingQuery = z.object({
+  days: z.coerce.number().int().min(1).max(365).default(45),
+});
+
+app.get("/events/upcoming", zValidator("query", upcomingQuery), async (c) => {
+  const account = requireAccount(c);
+  const { days } = c.req.valid("query");
+  const events = await eventsService.listUpcomingEvents(account, days);
+  return c.json({ events });
 });
 
 // Families
@@ -304,13 +317,24 @@ app.post(
   },
 );
 
-app.get("/families/:familyId/posts", zValidator("param", familyIdParam), async (c) => {
-  const account = requireAccount(c);
-  const { familyId } = c.req.valid("param");
-  const cursor = c.req.query("cursor");
-  const result = await socialService.listPosts(account, familyId, cursor);
-  return c.json(result);
-});
+app.get(
+  "/families/:familyId/posts",
+  zValidator("param", familyIdParam),
+  zValidator(
+    "query",
+    z.object({
+      cursor: z.string().max(200).optional(),
+      limit: z.coerce.number().int().min(1).max(50).default(20),
+    }),
+  ),
+  async (c) => {
+    const account = requireAccount(c);
+    const { familyId } = c.req.valid("param");
+    const { cursor, limit } = c.req.valid("query");
+    const result = await socialService.listPosts(account, familyId, cursor, limit);
+    return c.json(result);
+  },
+);
 
 app.patch(
   "/families/:familyId/posts/:postId",
