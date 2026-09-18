@@ -13,8 +13,18 @@ export async function getOrCreateAccount(
   if (existing) {
     return mapAccount(existing);
   }
-  const inserted = await db.insert(accounts).values({ authSubject, displayName }).returning();
-  return mapAccount(inserted[0]);
+  // Two concurrent first requests for the same subject must not both insert.
+  const inserted = await db
+    .insert(accounts)
+    .values({ authSubject, displayName })
+    .onConflictDoNothing()
+    .returning();
+  if (inserted.length > 0) return mapAccount(inserted[0]);
+  const raced = await db.query.accounts.findFirst({
+    where: eq(accounts.authSubject, authSubject),
+  });
+  if (!raced) throw new Error("Account provisioning failed.");
+  return mapAccount(raced);
 }
 
 export async function getAccountById(id: string): Promise<Account | undefined> {

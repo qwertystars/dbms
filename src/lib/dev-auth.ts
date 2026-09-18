@@ -18,6 +18,9 @@ export async function ensureDevKeys() {
 }
 
 export async function signDevToken(subject: string, displayName: string) {
+  if (env.AUTH_DEV_MODE !== "true") {
+    throw new Error("Development sign-in is disabled. Set AUTH_DEV_MODE=true to enable it.");
+  }
   await ensureDevKeys();
   if (!devPrivateKey) throw new Error("Dev keys not initialized");
   return await new SignJWT({ sub: subject, name: displayName })

@@ -1,9 +1,16 @@
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
+import { nanoid } from "nanoid";
 import { db } from "~/lib/db";
-import { familyMemberships, mediaAssets, people } from "~/db/schema";
+import {
+  auditEvents,
+  familyMemberships,
+  mediaAssets,
+  parentChildRelationships,
+  people,
+} from "~/db/schema";
 import { Errors } from "~/lib/errors";
 import type { Account } from "~/lib/context";
-import { audit } from "~/modules/audit/service";
+import { auditValues } from "~/modules/audit/service";
 
 export interface PersonInput {
   name: string;
@@ -38,33 +45,32 @@ function toDb(input: PersonInput) {
 }
 
 export async function createPerson(account: Account, familyId: string, input: PersonInput) {
-  const membership = await db.query.familyMemberships.findFirst({
-    where: and(
-      eq(familyMemberships.familyId, familyId),
-      eq(familyMemberships.accountId, account.id),
-      isNull(familyMemberships.removedAt),
-    ),
-  });
-  if (!membership || (membership.role !== "CREATOR" && membership.role !== "EDITOR")) {
-    throw Errors.FORBIDDEN();
-  }
+  await requireEditor(account, familyId);
   await assertPersonMediaInFamily(input.profileMediaId, familyId, account.id);
-  const [person] = await db
-    .insert(people)
-    .values({
-      familyId,
-      createdByAccountId: account.id,
-      ...toDb(input),
-    })
-    .returning();
-  await audit(db, {
-    actorAccountId: account.id,
+  const now = new Date();
+  const person = {
+    id: nanoid(),
     familyId,
-    action: "PERSON_CREATED",
-    targetType: "Person",
-    targetId: person.id,
-    summary: { name: input.name },
-  });
+    createdByAccountId: account.id,
+    ...toDb(input),
+    createdAt: now,
+    updatedAt: now,
+    deletedAt: null,
+  };
+
+  await db.batch([
+    db.insert(people).values(person),
+    db.insert(auditEvents).values(
+      auditValues({
+        actorAccountId: account.id,
+        familyId,
+        action: "PERSON_CREATED",
+        targetType: "Person",
+        targetId: person.id,
+        summary: { name: input.name },
+      }),
+    ),
+  ]);
   return person;
 }
 
@@ -90,6 +96,82 @@ export async function updatePerson(
   personId: string,
   input: Partial<PersonInput>,
 ) {
+  await requireEditor(account, familyId);
+  const person = await getPerson(familyId, personId);
+  await assertPersonMediaInFamily(input.profileMediaId, familyId, account.id);
+
+  const values: Record<string, unknown> = {};
+  if (input.name !== undefined) values.name = input.name;
+  if (input.gender !== undefined) values.gender = input.gender;
+  if (input.dateOfBirth !== undefined) values.dateOfBirth = input.dateOfBirth ?? null;
+  if (input.dateOfDeath !== undefined) values.dateOfDeath = input.dateOfDeath ?? null;
+  if (input.heightCm !== undefined) values.heightCm = input.heightCm ?? null;
+  if (input.weightKg !== undefined) values.weightKg = input.weightKg ?? null;
+  if (input.address !== undefined) values.address = input.address ?? null;
+  if (input.email !== undefined) values.email = input.email ?? null;
+  if (input.phone !== undefined) values.phone = input.phone ?? null;
+  if (input.occupation !== undefined) values.occupation = input.occupation ?? null;
+  if (input.biography !== undefined) values.biography = input.biography ?? null;
+  if (input.profileMediaId !== undefined) values.profileMediaId = input.profileMediaId ?? null;
+  const now = new Date();
+  values.updatedAt = now;
+
+  await db.batch([
+    db
+      .update(people)
+      .set(values as never)
+      .where(eq(people.id, personId)),
+    db.insert(auditEvents).values(
+      auditValues({
+        actorAccountId: account.id,
+        familyId,
+        action: "PERSON_UPDATED",
+        targetType: "Person",
+        targetId: personId,
+        summary: { name: input.name ?? person.name, fields: Object.keys(input) },
+      }),
+    ),
+  ]);
+  return await getPerson(familyId, personId);
+}
+
+export async function deletePerson(account: Account, familyId: string, personId: string) {
+  await requireCreator(account, familyId);
+  const person = await getPerson(familyId, personId);
+  const now = new Date();
+
+  // Soft-delete the person and detach dependent rows atomically. D1 enforces
+  // foreign keys, so the relationship and membership references must be
+  // resolved in the same batch.
+  await db.batch([
+    db
+      .delete(parentChildRelationships)
+      .where(
+        or(
+          eq(parentChildRelationships.parentPersonId, personId),
+          eq(parentChildRelationships.childPersonId, personId),
+        ),
+      ),
+    db
+      .update(familyMemberships)
+      .set({ personId: null })
+      .where(eq(familyMemberships.personId, personId)),
+    db.update(people).set({ deletedAt: now, updatedAt: now }).where(eq(people.id, personId)),
+    db.insert(auditEvents).values(
+      auditValues({
+        actorAccountId: account.id,
+        familyId,
+        action: "PERSON_DELETED",
+        targetType: "Person",
+        targetId: personId,
+        summary: { name: person.name },
+      }),
+    ),
+  ]);
+  return { deleted: true };
+}
+
+async function requireEditor(account: Account, familyId: string) {
   const membership = await db.query.familyMemberships.findFirst({
     where: and(
       eq(familyMemberships.familyId, familyId),
@@ -100,43 +182,10 @@ export async function updatePerson(
   if (!membership || (membership.role !== "CREATOR" && membership.role !== "EDITOR")) {
     throw Errors.FORBIDDEN();
   }
-  const person = await getPerson(familyId, personId);
-  await assertPersonMediaInFamily(input.profileMediaId, familyId, account.id);
-
-  const values: Record<string, unknown> = {};
-  if (input.name !== undefined) values.name = input.name;
-  if (input.gender !== undefined) values.gender = input.gender;
-  if (input.dateOfBirth !== undefined) values.dateOfBirth = input.dateOfBirth ?? null;
-  if (input.dateOfDeath !== undefined) values.dateOfDeath = input.dateOfDeath ?? null;
-  if (input.heightCm !== undefined)
-    values.heightCm = input.heightCm !== null ? String(input.heightCm) : null;
-  if (input.weightKg !== undefined)
-    values.weightKg = input.weightKg !== null ? String(input.weightKg) : null;
-  if (input.address !== undefined) values.address = input.address ?? null;
-  if (input.email !== undefined) values.email = input.email ?? null;
-  if (input.phone !== undefined) values.phone = input.phone ?? null;
-  if (input.occupation !== undefined) values.occupation = input.occupation ?? null;
-  if (input.biography !== undefined) values.biography = input.biography ?? null;
-  if (input.profileMediaId !== undefined) values.profileMediaId = input.profileMediaId ?? null;
-  values.updatedAt = new Date();
-
-  const [updated] = await db
-    .update(people)
-    .set(values as never)
-    .where(eq(people.id, personId))
-    .returning();
-  await audit(db, {
-    actorAccountId: account.id,
-    familyId,
-    action: "PERSON_UPDATED",
-    targetType: "Person",
-    targetId: personId,
-    summary: { name: input.name ?? person.name },
-  });
-  return updated;
+  return membership;
 }
 
-export async function deletePerson(account: Account, familyId: string, personId: string) {
+async function requireCreator(account: Account, familyId: string) {
   const membership = await db.query.familyMemberships.findFirst({
     where: and(
       eq(familyMemberships.familyId, familyId),
@@ -145,19 +194,7 @@ export async function deletePerson(account: Account, familyId: string, personId:
     ),
   });
   if (!membership || membership.role !== "CREATOR") throw Errors.FORBIDDEN();
-  const person = await getPerson(familyId, personId);
-  await db.transaction(async (tx) => {
-    await tx.delete(people).where(eq(people.id, personId));
-    await audit(tx, {
-      actorAccountId: account.id,
-      familyId,
-      action: "PERSON_DELETED",
-      targetType: "Person",
-      targetId: personId,
-      summary: { name: person.name },
-    });
-  });
-  return { deleted: true };
+  return membership;
 }
 
 async function assertPersonMediaInFamily(

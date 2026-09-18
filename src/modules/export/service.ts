@@ -3,6 +3,7 @@ import { db } from "~/lib/db";
 import { familyMemberships, parentChildRelationships, people } from "~/db/schema";
 import { Errors } from "~/lib/errors";
 import type { Account } from "~/lib/context";
+import { audit } from "~/modules/audit/service";
 
 export interface ExportOptions {
   format: "json" | "csv";
@@ -17,6 +18,15 @@ export async function exportFamilyData(account: Account, familyId: string, optio
     ),
   });
   if (!membership) throw Errors.FORBIDDEN();
+
+  await audit(db, {
+    actorAccountId: account.id,
+    familyId,
+    action: "FAMILY_EXPORTED",
+    targetType: "Family",
+    targetId: familyId,
+    summary: { format: options.format },
+  });
 
   const familyPeople = await db.query.people.findMany({
     where: and(eq(people.familyId, familyId), isNull(people.deletedAt)),

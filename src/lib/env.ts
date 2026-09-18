@@ -11,6 +11,8 @@ const envSchema = z.object({
   AUTH_JWKS: z.preprocess(emptyToUndefined, z.string().optional()),
   AUTH_ISSUER: z.string().min(1).default("http://localhost:3000"),
   AUTH_AUDIENCE: z.string().min(1).default("family-social-network"),
+  // Development-only cookie sign-in. Must never be "true" in production.
+  AUTH_DEV_MODE: z.preprocess(emptyToUndefined, z.enum(["true", "false"]).default("false")),
   OBJECT_STORAGE_ENDPOINT: z.preprocess(emptyToUndefined, z.string().url().optional()),
   OBJECT_STORAGE_BUCKET: z.preprocess(emptyToUndefined, z.string().optional()),
   OBJECT_STORAGE_ACCESS_KEY: z.preprocess(emptyToUndefined, z.string().optional()),

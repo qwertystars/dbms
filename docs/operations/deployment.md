@@ -103,6 +103,10 @@ In the Cloudflare Workers runtime the `DB` D1 binding and `MEDIA_BUCKET` R2 bind
    pnpm exec wrangler secret put OBJECT_STORAGE_SECRET_KEY
    ```
 
+   Never set `AUTH_DEV_MODE` in production. It is off unless explicitly set to
+   `"true"`, and when off the development `/api/auth/login` route is not mounted
+   at all, so only tokens from the configured OIDC provider are accepted.
+
 6. Build and deploy:
 
    ```bash
@@ -139,7 +143,9 @@ In the Cloudflare Workers runtime the `DB` D1 binding and `MEDIA_BUCKET` R2 bind
    This starts the Hono API server (`tsx watch src/server/index.ts`) on
    `http://localhost:3000` and the Vite dev server on
    `http://localhost:5173`, which proxies `/api/*` to the API server.
-   Local data uses the libsql `DATABASE_URL` (for example `file:./dev.db`).
+   `pnpm dev:api` sets `AUTH_DEV_MODE=true`, which enables the development
+   cookie sign-in on `/api/auth/login`. Local data uses the libsql
+   `DATABASE_URL` (for example `file:./dev.db`).
 
    For a production-faithful local run with real D1/R2 bindings, build the
    SPA and start the Workers runtime instead:
@@ -147,6 +153,13 @@ In the Cloudflare Workers runtime the `DB` D1 binding and `MEDIA_BUCKET` R2 bind
    ```bash
    pnpm db:apply:local
    pnpm preview:cloudflare   # vite build + wrangler dev
+   ```
+
+   To use the development sign-in in the Workers runtime as well, pass the
+   variable explicitly:
+
+   ```bash
+   pnpm exec wrangler dev --var AUTH_DEV_MODE:true
    ```
 
 4. To serve the production build on plain Node (no Cloudflare):

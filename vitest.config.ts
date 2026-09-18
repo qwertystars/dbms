@@ -19,6 +19,7 @@ export default defineConfig({
       NODE_ENV: "test",
       AUTH_ISSUER: "http://localhost:3000",
       AUTH_AUDIENCE: "family-social-network",
+      AUTH_DEV_MODE: "false",
     },
     fileParallelism: false,
     pool: "forks",

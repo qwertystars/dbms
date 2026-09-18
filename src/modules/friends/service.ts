@@ -1,4 +1,5 @@
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
+import { nanoid } from "nanoid";
 import { db } from "~/lib/db";
 import { accounts, friendRequests, friendships } from "~/db/schema";
 import { Errors } from "~/lib/errors";
@@ -12,65 +13,65 @@ export async function sendFriendRequest(account: Account, receiverAccountId: str
     .where(eq(accounts.id, receiverAccountId))
     .limit(1);
   if (receiver.length === 0) throw Errors.NOT_FOUND("No account exists with that ID.");
-  return await db.transaction(async (tx) => {
-    const existingAccepted = await tx
-      .select()
-      .from(friendships)
-      .where(
-        or(
-          and(
-            eq(friendships.accountLowId, account.id),
-            eq(friendships.accountHighId, receiverAccountId),
-          ),
-          and(
-            eq(friendships.accountLowId, receiverAccountId),
-            eq(friendships.accountHighId, account.id),
-          ),
-        ),
-      )
-      .limit(1);
-    if (existingAccepted.length > 0) throw Errors.FRIEND_DUPLICATE("You are already friends.");
 
-    const existingPending = await tx
-      .select()
-      .from(friendRequests)
-      .where(
+  const existingAccepted = await db
+    .select()
+    .from(friendships)
+    .where(
+      or(
         and(
-          eq(friendRequests.senderAccountId, account.id),
-          eq(friendRequests.receiverAccountId, receiverAccountId),
-          eq(friendRequests.status, "PENDING"),
+          eq(friendships.accountLowId, account.id),
+          eq(friendships.accountHighId, receiverAccountId),
         ),
-      )
-      .limit(1);
-    if (existingPending.length > 0)
-      throw Errors.FRIEND_DUPLICATE("A pending friend request already exists.");
-
-    const reverse = await tx
-      .select()
-      .from(friendRequests)
-      .where(
         and(
-          eq(friendRequests.senderAccountId, receiverAccountId),
-          eq(friendRequests.receiverAccountId, account.id),
-          eq(friendRequests.status, "PENDING"),
+          eq(friendships.accountLowId, receiverAccountId),
+          eq(friendships.accountHighId, account.id),
         ),
-      )
-      .limit(1);
-    if (reverse.length > 0) {
-      // They already asked us, so sending a request back accepts theirs.
-      return { ...(await acceptFriendRequestTx(tx, account, reverse[0].id)), accepted: true };
-    }
+      ),
+    )
+    .limit(1);
+  if (existingAccepted.length > 0) throw Errors.FRIEND_DUPLICATE("You are already friends.");
 
-    const [request] = await tx
-      .insert(friendRequests)
-      .values({
-        senderAccountId: account.id,
-        receiverAccountId,
-        status: "PENDING",
-      })
-      .returning();
-    return { request, accepted: false };
-  });
+  const existingPending = await db
+    .select()
+    .from(friendRequests)
+    .where(
+      and(
+        eq(friendRequests.senderAccountId, account.id),
+        eq(friendRequests.receiverAccountId, receiverAccountId),
+        eq(friendRequests.status, "PENDING"),
+      ),
+    )
+    .limit(1);
+  if (existingPending.length > 0)
+    throw Errors.FRIEND_DUPLICATE("A pending friend request already exists.");
+
+  const reverse = await db
+    .select()
+    .from(friendRequests)
+    .where(
+      and(
+        eq(friendRequests.senderAccountId, receiverAccountId),
+        eq(friendRequests.receiverAccountId, account.id),
+        eq(friendRequests.status, "PENDING"),
+      ),
+    )
+    .limit(1);
+  if (reverse.length > 0) {
+    // They already asked us, so sending a request back accepts theirs.
+    return { ...(await acceptFriendRequest(account, reverse[0].id)), accepted: true };
+  }
+
+  const request = {
+    id: nanoid(),
+    senderAccountId: account.id,
+    receiverAccountId,
+    status: "PENDING" as const,
+    createdAt: new Date(),
+    resolvedAt: null,
+  };
+  await db.insert(friendRequests).values(request);
+  return { request, accepted: false };
 }
 
 export async function listFriendRequests(account: Account) {
@@ -98,13 +99,7 @@ export async function listFriendRequests(account: Account) {
 }
 
 export async function acceptFriendRequest(account: Account, requestId: string) {
-  return await db.transaction(async (tx) => {
-    return await acceptFriendRequestTx(tx, account, requestId);
-  });
-}
-
-async function acceptFriendRequestTx(tx: typeof db, account: Account, requestId: string) {
-  const requestRows = await tx
+  const requestRows = await db
     .select()
     .from(friendRequests)
     .where(and(eq(friendRequests.id, requestId), eq(friendRequests.status, "PENDING")))
@@ -113,20 +108,41 @@ async function acceptFriendRequestTx(tx: typeof db, account: Account, requestId:
   const request = requestRows[0];
   if (request.receiverAccountId !== account.id) throw Errors.FORBIDDEN();
 
-  const [updated] = await tx
-    .update(friendRequests)
-    .set({ status: "ACCEPTED", resolvedAt: new Date() })
-    .where(eq(friendRequests.id, requestId))
-    .returning();
-
   const low = request.senderAccountId < account.id ? request.senderAccountId : account.id;
   const high = request.senderAccountId < account.id ? account.id : request.senderAccountId;
-  await tx
-    .insert(friendships)
-    .values({ accountLowId: low, accountHighId: high })
-    .onConflictDoNothing({ target: [friendships.accountLowId, friendships.accountHighId] });
+  const now = new Date();
 
-  return { request: updated, friendship: { accountLowId: low, accountHighId: high } };
+  // Atomic: create the friendship first, mark the request accepted, then undo
+  // the friendship if the guarded update lost a race.
+  await db.batch([
+    db
+      .insert(friendships)
+      .values({ accountLowId: low, accountHighId: high, createdAt: now })
+      .onConflictDoNothing(),
+    db
+      .update(friendRequests)
+      .set({ status: "ACCEPTED", resolvedAt: now })
+      .where(and(eq(friendRequests.id, requestId), eq(friendRequests.status, "PENDING"))),
+    db
+      .delete(friendships)
+      .where(
+        and(
+          eq(friendships.accountLowId, low),
+          eq(friendships.accountHighId, high),
+          sql`NOT EXISTS (SELECT 1 FROM ${friendRequests} WHERE ${friendRequests.id} = ${requestId} AND ${friendRequests.status} = 'ACCEPTED')`,
+        ),
+      ),
+  ]);
+
+  const updated = await db
+    .select()
+    .from(friendRequests)
+    .where(eq(friendRequests.id, requestId))
+    .limit(1);
+  if (updated.length === 0 || updated[0].status !== "ACCEPTED") {
+    throw Errors.NOT_FOUND("Friend request is no longer pending.");
+  }
+  return { request: updated[0], friendship: { accountLowId: low, accountHighId: high } };
 }
 
 export async function rejectFriendRequest(account: Account, requestId: string) {
@@ -141,8 +157,9 @@ export async function rejectFriendRequest(account: Account, requestId: string) {
   const [updated] = await db
     .update(friendRequests)
     .set({ status: "REJECTED", resolvedAt: new Date() })
-    .where(eq(friendRequests.id, requestId))
+    .where(and(eq(friendRequests.id, requestId), eq(friendRequests.status, "PENDING")))
     .returning();
+  if (!updated) throw Errors.NOT_FOUND("Friend request is no longer pending.");
   return { request: updated };
 }
 
@@ -158,8 +175,9 @@ export async function cancelFriendRequest(account: Account, requestId: string) {
   const [updated] = await db
     .update(friendRequests)
     .set({ status: "CANCELLED", resolvedAt: new Date() })
-    .where(eq(friendRequests.id, requestId))
+    .where(and(eq(friendRequests.id, requestId), eq(friendRequests.status, "PENDING")))
     .returning();
+  if (!updated) throw Errors.NOT_FOUND("Friend request is no longer pending.");
   return { request: updated };
 }
 

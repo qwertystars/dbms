@@ -1,9 +1,10 @@
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { nanoid } from "nanoid";
 import { db } from "~/lib/db";
-import { familyMemberships, parentChildRelationships, people } from "~/db/schema";
+import { auditEvents, familyMemberships, parentChildRelationships, people } from "~/db/schema";
 import { Errors } from "~/lib/errors";
 import type { Account } from "~/lib/context";
-import { audit } from "~/modules/audit/service";
+import { auditValues } from "~/modules/audit/service";
 
 export async function addParentChildEdge(
   account: Account,
@@ -25,56 +26,49 @@ export async function addParentChildEdge(
   }
 
   await verifyPeopleInFamily(familyId, [parentPersonId, childPersonId]);
+  await assertNoDuplicateEdge(familyId, parentPersonId, childPersonId);
+  await assertNoCycle(familyId, parentPersonId, childPersonId);
 
-  return await db.transaction(async (tx) => {
-    // Reject duplicate edge.
-    const existing = await tx.query.parentChildRelationships.findFirst({
-      where: and(
-        eq(parentChildRelationships.familyId, familyId),
-        eq(parentChildRelationships.parentPersonId, parentPersonId),
-        eq(parentChildRelationships.childPersonId, childPersonId),
-      ),
-    });
-    if (existing) throw Errors.TREE_DUPLICATE_EDGE();
-
-    // Cycle detection: child must not already reach parent.
-    const reaches = await tx.all(sql`
-      WITH RECURSIVE descendants AS (
-        SELECT child_person_id AS id FROM parent_child_relationships
-        WHERE family_id = ${familyId} AND parent_person_id = ${childPersonId}
-        UNION
-        SELECT pcr.child_person_id
-        FROM parent_child_relationships pcr
-        JOIN descendants d ON pcr.parent_person_id = d.id
-        WHERE pcr.family_id = ${familyId}
-      )
-      SELECT 1 AS found FROM descendants WHERE id = ${parentPersonId} LIMIT 1
-    `);
-    if (reaches.length > 0) {
-      throw Errors.TREE_CYCLE();
-    }
-
-    const [edge] = await tx
-      .insert(parentChildRelationships)
-      .values({
-        familyId,
-        parentPersonId,
-        childPersonId,
-        createdByAccountId: account.id,
-      })
-      .returning();
-
-    await audit(tx, {
-      actorAccountId: account.id,
-      familyId,
-      action: "PARENT_CHILD_EDGE_ADDED",
-      targetType: "ParentChildRelationship",
-      targetId: edge.id,
-      summary: { parentPersonId, childPersonId },
-    });
-
-    return edge;
+  const edge = {
+    id: nanoid(),
+    familyId,
+    parentPersonId,
+    childPersonId,
+    createdByAccountId: account.id,
+    createdAt: new Date(),
+  };
+  const auditor = auditValues({
+    actorAccountId: account.id,
+    familyId,
+    action: "PARENT_CHILD_EDGE_ADDED",
+    targetType: "ParentChildRelationship",
+    targetId: edge.id,
+    summary: { parentPersonId, childPersonId },
   });
+
+  await db.batch([
+    db.insert(parentChildRelationships).values(edge).onConflictDoNothing(),
+    db.insert(auditEvents).values(auditor),
+    // If the insert lost a race (duplicate edge), remove the audit event too.
+    db
+      .delete(auditEvents)
+      .where(
+        and(
+          eq(auditEvents.id, auditor.id),
+          sql`NOT EXISTS (SELECT 1 FROM ${parentChildRelationships} WHERE ${parentChildRelationships.id} = ${edge.id})`,
+        ),
+      ),
+  ]);
+
+  const created = await db.query.parentChildRelationships.findFirst({
+    where: eq(parentChildRelationships.id, edge.id),
+  });
+  if (!created) {
+    // Re-run the checks so callers get the accurate conflict code.
+    await assertNoDuplicateEdge(familyId, parentPersonId, childPersonId);
+    throw Errors.TREE_CYCLE();
+  }
+  return created;
 }
 
 export async function removeParentChildEdge(
@@ -93,27 +87,28 @@ export async function removeParentChildEdge(
     throw Errors.FORBIDDEN();
   }
 
-  return await db.transaction(async (tx) => {
-    const edge = await tx.query.parentChildRelationships.findFirst({
-      where: and(
-        eq(parentChildRelationships.id, relationshipId),
-        eq(parentChildRelationships.familyId, familyId),
-      ),
-    });
-    if (!edge) throw Errors.NOT_FOUND();
-    await tx
-      .delete(parentChildRelationships)
-      .where(eq(parentChildRelationships.id, relationshipId));
-    await audit(tx, {
-      actorAccountId: account.id,
-      familyId,
-      action: "PARENT_CHILD_EDGE_REMOVED",
-      targetType: "ParentChildRelationship",
-      targetId: relationshipId,
-      summary: { parentPersonId: edge.parentPersonId, childPersonId: edge.childPersonId },
-    });
-    return { removed: true };
+  const edge = await db.query.parentChildRelationships.findFirst({
+    where: and(
+      eq(parentChildRelationships.id, relationshipId),
+      eq(parentChildRelationships.familyId, familyId),
+    ),
   });
+  if (!edge) throw Errors.NOT_FOUND();
+
+  await db.batch([
+    db.delete(parentChildRelationships).where(eq(parentChildRelationships.id, relationshipId)),
+    db.insert(auditEvents).values(
+      auditValues({
+        actorAccountId: account.id,
+        familyId,
+        action: "PARENT_CHILD_EDGE_REMOVED",
+        targetType: "ParentChildRelationship",
+        targetId: relationshipId,
+        summary: { parentPersonId: edge.parentPersonId, childPersonId: edge.childPersonId },
+      }),
+    ),
+  ]);
+  return { removed: true };
 }
 
 export async function getTree(
@@ -200,6 +195,41 @@ function edgesBetween<T extends { parentPersonId: string; childPersonId: string 
 ): T[] {
   const ids = new Set(visiblePeople.map((p) => p.id));
   return edges.filter((e) => ids.has(e.parentPersonId) && ids.has(e.childPersonId));
+}
+
+async function assertNoDuplicateEdge(
+  familyId: string,
+  parentPersonId: string,
+  childPersonId: string,
+): Promise<void> {
+  const existing = await db.query.parentChildRelationships.findFirst({
+    where: and(
+      eq(parentChildRelationships.familyId, familyId),
+      eq(parentChildRelationships.parentPersonId, parentPersonId),
+      eq(parentChildRelationships.childPersonId, childPersonId),
+    ),
+  });
+  if (existing) throw Errors.TREE_DUPLICATE_EDGE();
+}
+
+async function assertNoCycle(
+  familyId: string,
+  parentPersonId: string,
+  childPersonId: string,
+): Promise<void> {
+  const reaches = await db.all(sql`
+    WITH RECURSIVE descendants AS (
+      SELECT child_person_id AS id FROM parent_child_relationships
+      WHERE family_id = ${familyId} AND parent_person_id = ${childPersonId}
+      UNION
+      SELECT pcr.child_person_id
+      FROM parent_child_relationships pcr
+      JOIN descendants d ON pcr.parent_person_id = d.id
+      WHERE pcr.family_id = ${familyId}
+    )
+    SELECT 1 AS found FROM descendants WHERE id = ${parentPersonId} LIMIT 1
+  `);
+  if (reaches.length > 0) throw Errors.TREE_CYCLE();
 }
 
 async function verifyPeopleInFamily(familyId: string, personIds: string[]) {

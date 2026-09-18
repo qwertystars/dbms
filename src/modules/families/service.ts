@@ -1,7 +1,9 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { nanoid } from "nanoid";
 import { db } from "~/lib/db";
 import {
   accounts as dbAccounts,
+  auditEvents,
   families,
   familyInvitations,
   familyMemberships,
@@ -9,36 +11,48 @@ import {
 import { Errors } from "~/lib/errors";
 import type { Account } from "~/lib/context";
 import { hashToken, randomToken } from "~/lib/crypto";
-import { audit } from "~/modules/audit/service";
+import { auditValues } from "~/modules/audit/service";
 import type { Membership } from "~/modules/auth/policy";
 
 export async function createFamily(
   account: Account,
   input: { name: string; description?: string | null },
 ) {
-  return await db.transaction(async (tx) => {
-    const [family] = await tx
-      .insert(families)
-      .values({ name: input.name, description: input.description ?? null })
-      .returning();
-    const [membership] = await tx
-      .insert(familyMemberships)
-      .values({
+  const now = new Date();
+  const family = {
+    id: nanoid(),
+    name: input.name,
+    description: input.description ?? null,
+    createdAt: now,
+    updatedAt: now,
+    deletedAt: null,
+  };
+  const membership = {
+    id: nanoid(),
+    familyId: family.id,
+    accountId: account.id,
+    personId: null,
+    role: "CREATOR" as const,
+    joinedAt: now,
+    removedAt: null,
+  };
+
+  await db.batch([
+    db.insert(families).values(family),
+    db.insert(familyMemberships).values(membership),
+    db.insert(auditEvents).values(
+      auditValues({
+        actorAccountId: account.id,
         familyId: family.id,
-        accountId: account.id,
-        role: "CREATOR",
-      })
-      .returning();
-    await audit(tx, {
-      actorAccountId: account.id,
-      familyId: family.id,
-      action: "FAMILY_CREATED",
-      targetType: "Family",
-      targetId: family.id,
-      summary: { name: family.name },
-    });
-    return { family, membership: mapMembership(membership) };
-  });
+        action: "FAMILY_CREATED",
+        targetType: "Family",
+        targetId: family.id,
+        summary: { name: family.name },
+      }),
+    ),
+  ]);
+
+  return { family, membership: mapMembership(membership) };
 }
 
 export async function listFamilies(account: Account) {
@@ -49,7 +63,13 @@ export async function listFamilies(account: Account) {
     })
     .from(familyMemberships)
     .innerJoin(families, eq(familyMemberships.familyId, families.id))
-    .where(and(eq(familyMemberships.accountId, account.id), isNull(familyMemberships.removedAt)));
+    .where(
+      and(
+        eq(familyMemberships.accountId, account.id),
+        isNull(familyMemberships.removedAt),
+        isNull(families.deletedAt),
+      ),
+    );
   return rows.map((r) => ({
     membership: mapMembership(r.membership),
     family: r.family,
@@ -71,16 +91,36 @@ export async function updateFamily(
 ) {
   const row = await getMembership(familyId, account.id);
   if (!row || row.role !== "CREATOR") throw Errors.FORBIDDEN();
-  const [updated] = await db
-    .update(families)
-    .set({
-      name: input.name,
-      description: input.description,
-      updatedAt: new Date(),
-    })
-    .where(eq(families.id, familyId))
-    .returning();
-  return updated;
+  const family = await getFamily(familyId);
+  const now = new Date();
+
+  await db.batch([
+    db
+      .update(families)
+      .set({
+        name: input.name,
+        description: input.description,
+        updatedAt: now,
+      })
+      .where(eq(families.id, familyId)),
+    db.insert(auditEvents).values(
+      auditValues({
+        actorAccountId: account.id,
+        familyId,
+        action: "FAMILY_UPDATED",
+        targetType: "Family",
+        targetId: familyId,
+        summary: { fields: Object.keys(input) },
+      }),
+    ),
+  ]);
+
+  return {
+    ...family,
+    name: input.name ?? family.name,
+    description: input.description === undefined ? family.description : input.description,
+    updatedAt: now,
+  };
 }
 
 export async function deleteFamily(account: Account, familyId: string, confirmation: string) {
@@ -90,24 +130,24 @@ export async function deleteFamily(account: Account, familyId: string, confirmat
   if (confirmation !== `delete-${family.id}`) {
     throw Errors.VALIDATION("Confirmation token does not match.");
   }
-  await db.transaction(async (tx) => {
-    await tx
-      .update(families)
-      .set({ deletedAt: new Date(), updatedAt: new Date() })
-      .where(eq(families.id, familyId));
-    await tx
+  const now = new Date();
+  await db.batch([
+    db.update(families).set({ deletedAt: now, updatedAt: now }).where(eq(families.id, familyId)),
+    db
       .update(familyMemberships)
-      .set({ removedAt: new Date() })
-      .where(eq(familyMemberships.familyId, familyId));
-    await audit(tx, {
-      actorAccountId: account.id,
-      familyId,
-      action: "FAMILY_DELETED",
-      targetType: "Family",
-      targetId: familyId,
-      summary: { name: family.name },
-    });
-  });
+      .set({ removedAt: now })
+      .where(eq(familyMemberships.familyId, familyId)),
+    db.insert(auditEvents).values(
+      auditValues({
+        actorAccountId: account.id,
+        familyId,
+        action: "FAMILY_DELETED",
+        targetType: "Family",
+        targetId: familyId,
+        summary: { name: family.name },
+      }),
+    ),
+  ]);
   return { deleted: true };
 }
 
@@ -137,14 +177,23 @@ export async function updateMembership(
   const target = await db.query.familyMemberships.findFirst({
     where: and(eq(familyMemberships.id, membershipId), eq(familyMemberships.familyId, familyId)),
   });
-  if (!target) throw Errors.NOT_FOUND();
+  if (!target || target.removedAt) throw Errors.NOT_FOUND();
   if (target.role === "CREATOR") throw Errors.FORBIDDEN("Cannot change the Creator role.");
-  const [updated] = await db
-    .update(familyMemberships)
-    .set({ role })
-    .where(eq(familyMemberships.id, membershipId))
-    .returning();
-  return mapMembership(updated);
+
+  await db.batch([
+    db.update(familyMemberships).set({ role }).where(eq(familyMemberships.id, membershipId)),
+    db.insert(auditEvents).values(
+      auditValues({
+        actorAccountId: actor.id,
+        familyId,
+        action: "MEMBERSHIP_ROLE_UPDATED",
+        targetType: "FamilyMembership",
+        targetId: membershipId,
+        summary: { from: target.role, to: role },
+      }),
+    ),
+  ]);
+  return mapMembership({ ...target, role });
 }
 
 export async function removeMembership(actor: Account, familyId: string, membershipId: string) {
@@ -153,12 +202,25 @@ export async function removeMembership(actor: Account, familyId: string, members
   const target = await db.query.familyMemberships.findFirst({
     where: and(eq(familyMemberships.id, membershipId), eq(familyMemberships.familyId, familyId)),
   });
-  if (!target) throw Errors.NOT_FOUND();
+  if (!target || target.removedAt) throw Errors.NOT_FOUND();
   if (target.role === "CREATOR") throw Errors.FORBIDDEN("Cannot remove the Creator.");
-  await db
-    .update(familyMemberships)
-    .set({ removedAt: new Date() })
-    .where(eq(familyMemberships.id, membershipId));
+
+  await db.batch([
+    db
+      .update(familyMemberships)
+      .set({ removedAt: new Date() })
+      .where(eq(familyMemberships.id, membershipId)),
+    db.insert(auditEvents).values(
+      auditValues({
+        actorAccountId: actor.id,
+        familyId,
+        action: "MEMBERSHIP_REMOVED",
+        targetType: "FamilyMembership",
+        targetId: membershipId,
+        summary: { accountId: target.accountId, role: target.role },
+      }),
+    ),
+  ]);
   return { removed: true };
 }
 
@@ -167,44 +229,72 @@ export async function transferOwnership(
   familyId: string,
   newCreatorMembershipId: string,
 ) {
-  return await db.transaction(async (tx) => {
-    const current = await tx.query.familyMemberships.findFirst({
-      where: and(
-        eq(familyMemberships.familyId, familyId),
-        eq(familyMemberships.accountId, actor.id),
-        isNull(familyMemberships.removedAt),
-      ),
-    });
-    if (!current || current.role !== "CREATOR") throw Errors.FORBIDDEN();
-    const target = await tx.query.familyMemberships.findFirst({
-      where: and(
-        eq(familyMemberships.id, newCreatorMembershipId),
-        eq(familyMemberships.familyId, familyId),
-        isNull(familyMemberships.removedAt),
-      ),
-    });
-    if (!target) throw Errors.NOT_FOUND();
-    if (target.role !== "EDITOR" && target.role !== "VIEWER") {
-      throw Errors.VALIDATION("New creator must be an active Editor or Viewer.");
-    }
-    await tx
+  const current = await db.query.familyMemberships.findFirst({
+    where: and(
+      eq(familyMemberships.familyId, familyId),
+      eq(familyMemberships.accountId, actor.id),
+      isNull(familyMemberships.removedAt),
+    ),
+  });
+  if (!current || current.role !== "CREATOR") throw Errors.FORBIDDEN();
+  const target = await db.query.familyMemberships.findFirst({
+    where: and(
+      eq(familyMemberships.id, newCreatorMembershipId),
+      eq(familyMemberships.familyId, familyId),
+      isNull(familyMemberships.removedAt),
+    ),
+  });
+  if (!target) throw Errors.NOT_FOUND();
+  if (target.role !== "EDITOR" && target.role !== "VIEWER") {
+    throw Errors.VALIDATION("New creator must be an active Editor or Viewer.");
+  }
+
+  // Each update is guarded by the other row's state, so a concurrent transfer
+  // cannot leave the family with two Creators or none. The batch is atomic.
+  await db.batch([
+    db
       .update(familyMemberships)
       .set({ role: "CREATOR" })
-      .where(eq(familyMemberships.id, newCreatorMembershipId));
-    await tx
+      .where(
+        and(
+          eq(familyMemberships.id, target.id),
+          eq(familyMemberships.familyId, familyId),
+          isNull(familyMemberships.removedAt),
+          inArray(familyMemberships.role, ["EDITOR", "VIEWER"]),
+          sql`EXISTS (SELECT 1 FROM ${familyMemberships} WHERE ${familyMemberships.id} = ${current.id} AND ${familyMemberships.role} = 'CREATOR' AND ${familyMemberships.removedAt} IS NULL)`,
+        ),
+      ),
+    db
       .update(familyMemberships)
       .set({ role: "EDITOR" })
-      .where(eq(familyMemberships.id, current.id));
-    await audit(tx, {
-      actorAccountId: actor.id,
-      familyId,
-      action: "OWNERSHIP_TRANSFERRED",
-      targetType: "FamilyMembership",
-      targetId: newCreatorMembershipId,
-      summary: { fromMembershipId: current.id, toMembershipId: newCreatorMembershipId },
-    });
-    return { transferred: true };
-  });
+      .where(
+        and(
+          eq(familyMemberships.id, current.id),
+          eq(familyMemberships.familyId, familyId),
+          eq(familyMemberships.role, "CREATOR"),
+          sql`EXISTS (SELECT 1 FROM ${familyMemberships} WHERE ${familyMemberships.id} = ${target.id} AND ${familyMemberships.role} = 'CREATOR' AND ${familyMemberships.removedAt} IS NULL)`,
+        ),
+      ),
+    db.insert(auditEvents).values(
+      auditValues({
+        actorAccountId: actor.id,
+        familyId,
+        action: "OWNERSHIP_TRANSFERRED",
+        targetType: "FamilyMembership",
+        targetId: newCreatorMembershipId,
+        summary: { fromMembershipId: current.id, toMembershipId: newCreatorMembershipId },
+      }),
+    ),
+  ]);
+
+  const [updatedCurrent, updatedTarget] = await Promise.all([
+    db.query.familyMemberships.findFirst({ where: eq(familyMemberships.id, current.id) }),
+    db.query.familyMemberships.findFirst({ where: eq(familyMemberships.id, target.id) }),
+  ]);
+  if (updatedCurrent?.role !== "EDITOR" || updatedTarget?.role !== "CREATOR") {
+    throw Errors.CONFLICT("Ownership changed concurrently. Refresh and try again.");
+  }
+  return { transferred: true };
 }
 
 export async function createInvitation(
@@ -216,18 +306,34 @@ export async function createInvitation(
   if (!actorMembership || actorMembership.role !== "CREATOR") throw Errors.FORBIDDEN();
   const token = randomToken();
   const tokenHash = hashToken(token);
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-  const [invitation] = await db
-    .insert(familyInvitations)
-    .values({
-      familyId,
-      createdByAccountId: actor.id,
-      invitedEmail: input.email ?? null,
-      role: input.role,
-      tokenHash,
-      expiresAt,
-    })
-    .returning();
+  const invitation = {
+    id: nanoid(),
+    familyId,
+    createdByAccountId: actor.id,
+    invitedEmail: input.email ?? null,
+    role: input.role,
+    tokenHash,
+    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    acceptedAt: null,
+    acceptedByAccountId: null,
+    revokedAt: null,
+    createdAt: new Date(),
+  };
+
+  await db.batch([
+    db.insert(familyInvitations).values(invitation),
+    db.insert(auditEvents).values(
+      auditValues({
+        actorAccountId: actor.id,
+        familyId,
+        action: "INVITATION_CREATED",
+        targetType: "FamilyInvitation",
+        targetId: invitation.id,
+        summary: { role: invitation.role },
+      }),
+    ),
+  ]);
+
   return { invitation, token };
 }
 
@@ -239,47 +345,99 @@ export async function acceptInvitation(account: Account, token: string) {
   if (!invitation) throw Errors.NOT_FOUND("Invitation not found.");
   if (invitation.expiresAt < new Date()) throw Errors.INVITATION_EXPIRED();
 
-  return await db.transaction(async (tx) => {
-    const existing = await tx.query.familyMemberships.findFirst({
-      where: and(
-        eq(familyMemberships.familyId, invitation.familyId),
-        eq(familyMemberships.accountId, account.id),
-        isNull(familyMemberships.removedAt),
-      ),
-    });
-    if (existing) {
-      if (invitation.acceptedAt === null) {
-        await tx
-          .update(familyInvitations)
-          .set({ acceptedAt: new Date(), acceptedByAccountId: account.id })
-          .where(eq(familyInvitations.id, invitation.id));
-      }
-      return { membership: mapMembership(existing), alreadyMember: true };
-    }
-    if (invitation.acceptedAt !== null)
-      throw Errors.INVITATION_USED("Invitation has already been used.");
-    const [membership] = await tx
-      .insert(familyMemberships)
-      .values({
-        familyId: invitation.familyId,
-        accountId: account.id,
-        role: invitation.role,
-      })
-      .returning();
-    await tx
-      .update(familyInvitations)
-      .set({ acceptedAt: new Date(), acceptedByAccountId: account.id })
-      .where(eq(familyInvitations.id, invitation.id));
-    await audit(tx, {
-      actorAccountId: account.id,
-      familyId: invitation.familyId,
-      action: "INVITATION_ACCEPTED",
-      targetType: "FamilyInvitation",
-      targetId: invitation.id,
-      summary: { role: invitation.role },
-    });
-    return { membership: mapMembership(membership), alreadyMember: false };
+  const existing = await db.query.familyMemberships.findFirst({
+    where: and(
+      eq(familyMemberships.familyId, invitation.familyId),
+      eq(familyMemberships.accountId, account.id),
+      isNull(familyMemberships.removedAt),
+    ),
   });
+  const now = new Date();
+
+  if (existing) {
+    if (invitation.acceptedAt === null) {
+      await db.batch([
+        db
+          .update(familyInvitations)
+          .set({ acceptedAt: now, acceptedByAccountId: account.id })
+          .where(
+            and(eq(familyInvitations.id, invitation.id), isNull(familyInvitations.acceptedAt)),
+          ),
+        db.insert(auditEvents).values(
+          auditValues({
+            actorAccountId: account.id,
+            familyId: invitation.familyId,
+            action: "INVITATION_ACCEPTED",
+            targetType: "FamilyInvitation",
+            targetId: invitation.id,
+            summary: { role: invitation.role },
+          }),
+        ),
+      ]);
+    }
+    return { membership: mapMembership(existing), alreadyMember: true };
+  }
+
+  if (invitation.acceptedAt !== null)
+    throw Errors.INVITATION_USED("Invitation has already been used.");
+
+  // Single-use guarantee without an interactive transaction:
+  // 1. insert the membership,
+  // 2. claim the invitation with a guarded update,
+  // 3. drop the membership again if the claim was lost to a concurrent accept,
+  // 4. write the audit event only while the membership exists.
+  const membership = {
+    id: nanoid(),
+    familyId: invitation.familyId,
+    accountId: account.id,
+    personId: null,
+    role: invitation.role,
+    joinedAt: now,
+    removedAt: null,
+  };
+  const auditor = auditValues({
+    actorAccountId: account.id,
+    familyId: invitation.familyId,
+    action: "INVITATION_ACCEPTED",
+    targetType: "FamilyInvitation",
+    targetId: invitation.id,
+    summary: { role: invitation.role },
+  });
+
+  await db.batch([
+    db.insert(familyMemberships).values(membership).onConflictDoNothing(),
+    db
+      .update(familyInvitations)
+      .set({ acceptedAt: now, acceptedByAccountId: account.id })
+      .where(and(eq(familyInvitations.id, invitation.id), isNull(familyInvitations.acceptedAt))),
+    db
+      .delete(familyMemberships)
+      .where(
+        and(
+          eq(familyMemberships.id, membership.id),
+          sql`NOT EXISTS (SELECT 1 FROM ${familyInvitations} WHERE ${familyInvitations.id} = ${invitation.id} AND ${familyInvitations.acceptedByAccountId} = ${account.id})`,
+        ),
+      ),
+    db.insert(auditEvents).values(auditor),
+    db
+      .delete(auditEvents)
+      .where(
+        and(
+          eq(auditEvents.id, auditor.id),
+          sql`NOT EXISTS (SELECT 1 FROM ${familyMemberships} WHERE ${familyMemberships.id} = ${membership.id})`,
+        ),
+      ),
+  ]);
+
+  const claimed = await db.query.familyMemberships.findFirst({
+    where: and(
+      eq(familyMemberships.familyId, invitation.familyId),
+      eq(familyMemberships.accountId, account.id),
+      isNull(familyMemberships.removedAt),
+    ),
+  });
+  if (!claimed) throw Errors.INVITATION_USED("Invitation has already been used.");
+  return { membership: mapMembership(claimed), alreadyMember: claimed.id !== membership.id };
 }
 
 export async function getMembership(
