@@ -135,7 +135,7 @@ None required for v1.0. Optional follow-ups:
 - Add e2e tests (Playwright/Cypress).
 - Move rate limiting to Durable Objects or another shared store for multi-instance deployments.
 - Implement media uploads against the `MEDIA_BUCKET` R2 binding and return real presigned URLs.
-- Add coverage thresholds and a migration-drift check (`db:generate` + `git diff --exit-code`) to CI.
+- Add coverage thresholds to CI (migration drift is already checked).
 - Apply D1 migrations to the Cloudflare database and deploy with `pnpm deploy:cloudflare`.
 
 After any implementation work, update this file with factual status.
