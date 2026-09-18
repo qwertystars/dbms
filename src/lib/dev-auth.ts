@@ -14,7 +14,6 @@ export async function ensureDevKeys() {
   const publicJWK = jwk as Record<string, unknown>;
   const cryptoKey = (await importJWK(publicJWK, "RS256")) as KeyLike;
   setCachedJWKs([cryptoKey]);
-  process.env.AUTH_JWKS = JSON.stringify({ keys: [publicJWK] });
 }
 
 export async function signDevToken(subject: string, displayName: string) {

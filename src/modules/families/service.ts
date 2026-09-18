@@ -305,7 +305,7 @@ export async function createInvitation(
   const actorMembership = await getMembership(familyId, actor.id);
   if (!actorMembership || actorMembership.role !== "CREATOR") throw Errors.FORBIDDEN();
   const token = randomToken();
-  const tokenHash = hashToken(token);
+  const tokenHash = await hashToken(token);
   const invitation = {
     id: nanoid(),
     familyId,
@@ -338,7 +338,7 @@ export async function createInvitation(
 }
 
 export async function acceptInvitation(account: Account, token: string) {
-  const tokenHash = hashToken(token);
+  const tokenHash = await hashToken(token);
   const invitation = await db.query.familyInvitations.findFirst({
     where: and(eq(familyInvitations.tokenHash, tokenHash), isNull(familyInvitations.revokedAt)),
   });

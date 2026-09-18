@@ -17,6 +17,17 @@ pnpm dev               # API on :3000, web app on http://localhost:5173
 
 Open http://localhost:5173 and use the development sign-in (any user ID works). `pnpm dev` sets `AUTH_DEV_MODE=true`; without it the sign-in route is disabled, which is the default in production.
 
+## Running on Cloudflare locally
+
+`wrangler dev` runs the real Workers runtime with local D1 and R2 bindings, so this is the closest thing to production:
+
+```bash
+pnpm db:apply:local      # apply migrations to the local D1 database
+pnpm preview:cloudflare  # vite build + wrangler dev on http://localhost:8787
+```
+
+The preview script enables the development sign-in for local use. For a deployed Worker, add a real OIDC provider (`AUTH_JWKS_URI`) and leave `AUTH_DEV_MODE` unset. To deploy for real, create the D1 database and R2 bucket, put their IDs in `wrangler.jsonc`, then run `pnpm deploy:cloudflare`. Full steps live in `docs/operations/deployment.md`.
+
 Checks: `pnpm format:check && pnpm lint && pnpm type-check && pnpm test`.
 
 ## Core product idea

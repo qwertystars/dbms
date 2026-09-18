@@ -1,4 +1,3 @@
-import "dotenv/config";
 import { z } from "zod";
 
 const emptyToUndefined = (v: unknown) => (typeof v === "string" && v.trim() === "" ? undefined : v);

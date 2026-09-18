@@ -47,6 +47,8 @@ The frontend is a Vite + React single-page application and the backend is a stan
   - D1 database binding (`DB`)
   - R2 media bucket binding (`MEDIA_BUCKET`)
   - `wrangler.jsonc` with `run_worker_first: ["/api/*"]`, `not_found_handling: "single-page-application"`, and staging/production environment overrides
+  - `pnpm preview:cloudflare` builds the SPA and runs the real Workers runtime (`wrangler dev`) with local D1/R2 bindings and the development sign-in enabled (`AUTH_DEV_MODE=true`)
+  - `.dev.vars.example` documents optional local Worker variables; `.dev.vars` is gitignored
   - `wrangler types` generated worker types
 
 ## Partially implemented capabilities
@@ -99,8 +101,9 @@ Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF
 ## Infrastructure and deployment
 
 - `wrangler.jsonc` declares the D1 `DB` binding, `MEDIA_BUCKET` R2 binding, the static assets binding (`dist/`, SPA fallback, `run_worker_first` for `/api/*`), and environment-specific staging/production overrides.
+- The Worker bundle does not depend on Node-only modules beyond the `nodejs_compat` polyfill: token hashing uses Web Crypto (`crypto.subtle`/`getRandomValues`), and `dotenv` is imported only by the Node entry (`src/server/index.ts`). `node:async_hooks` is provided by `nodejs_compat`.
 - `.env.example` documents `DATABASE_URL`, `APP_BASE_URL`, `PORT`, auth settings including `AUTH_DEV_MODE`, and optional OIDC/S3-compatible storage variables.
-- `.github/workflows/ci.yml` runs format, lint, type-check, migration generation, migration application to a local SQLite file, `vite build` + `wrangler deploy --dry-run`, and tests.
+- `.github/workflows/ci.yml` runs format, lint, type-check, migration generation, migration drift check, migration application to a local SQLite file, `vite build` + `wrangler deploy --dry-run`, and tests.
 
 ## Tests
 

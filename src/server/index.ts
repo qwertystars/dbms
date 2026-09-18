@@ -1,3 +1,6 @@
+// Loads .env into process.env for the Node server only. The Cloudflare worker
+// gets vars and secrets from its bindings (auto-populated into process.env).
+import "dotenv/config";
 import { readFile } from "node:fs/promises";
 import { extname, resolve } from "node:path";
 import { serve } from "@hono/node-server";

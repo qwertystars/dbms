@@ -152,11 +152,11 @@ In the Cloudflare Workers runtime the `DB` D1 binding and `MEDIA_BUCKET` R2 bind
 
    ```bash
    pnpm db:apply:local
-   pnpm preview:cloudflare   # vite build + wrangler dev
+   pnpm preview:cloudflare   # vite build + wrangler dev (AUTH_DEV_MODE=true)
    ```
 
-   To use the development sign-in in the Workers runtime as well, pass the
-   variable explicitly:
+   The preview script passes `AUTH_DEV_MODE=true` so the development sign-in
+   works. To run `wrangler dev` directly instead, pass the same variable:
 
    ```bash
    pnpm exec wrangler dev --var AUTH_DEV_MODE:true

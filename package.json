@@ -22,7 +22,7 @@
     "db:apply:cloudflare": "wrangler d1 migrations apply family-social-db",
     "build:cloudflare": "vite build && wrangler deploy --dry-run --outdir .wrangler/dry-run",
     "deploy:cloudflare": "vite build && wrangler deploy",
-    "preview:cloudflare": "vite build && wrangler dev",
+    "preview:cloudflare": "vite build && wrangler dev --var AUTH_DEV_MODE:true",
     "wrangler:types": "wrangler types"
   },
   "dependencies": {
