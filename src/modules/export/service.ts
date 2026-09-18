@@ -1,6 +1,6 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "~/lib/db";
-import { accounts, familyMemberships, parentChildRelationships, people, posts } from "~/db/schema";
+import { familyMemberships, parentChildRelationships, people } from "~/db/schema";
 import { Errors } from "~/lib/errors";
 import type { Account } from "~/lib/context";
 
@@ -21,9 +21,13 @@ export async function exportFamilyData(account: Account, familyId: string, optio
   const familyPeople = await db.query.people.findMany({
     where: and(eq(people.familyId, familyId), isNull(people.deletedAt)),
   });
-  const edges = await db.query.parentChildRelationships.findMany({
-    where: eq(parentChildRelationships.familyId, familyId),
-  });
+  // Only export relationships between people who have not been deleted.
+  const livePersonIds = new Set(familyPeople.map((p) => p.id));
+  const edges = (
+    await db.query.parentChildRelationships.findMany({
+      where: eq(parentChildRelationships.familyId, familyId),
+    })
+  ).filter((e) => livePersonIds.has(e.parentPersonId) && livePersonIds.has(e.childPersonId));
 
   if (options.format === "csv") {
     const csv = toCsv(familyPeople, edges);

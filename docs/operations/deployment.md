@@ -9,11 +9,17 @@ Browser
   |
 HTTPS
   |
-Web application / API
-  |--------------------|
-  |                    |
-PostgreSQL         Object storage
+Cloudflare Workers (Hono API + Vite SPA static assets)
+  |
+  |-------------------|-------------------|
+  |                   |                   |
+Cloudflare D1    Cloudflare R2    Object storage (optional/S3-compatible)
 ```
+
+The Worker entry is `src/worker.ts`. It serves the Hono API for `/api/*`
+requests (`run_worker_first` in `wrangler.jsonc`) and delegates every other
+path to the static assets binding, which serves the Vite build output in
+`dist/` with single-page-application fallback (`not_found_handling`).
 
 Authentication may use an external OIDC/OAuth provider.
 
@@ -32,17 +38,129 @@ Production must not share database credentials or storage buckets with local/sta
 ## Required environment categories
 
 ```text
-DATABASE_URL
-APP_BASE_URL
+# Local / tests
+DATABASE_URL=file:./dev.db
 
-AUTH_*
+APP_BASE_URL
+NODE_ENV
+
+AUTH_JWKS_URI or AUTH_JWKS
+AUTH_ISSUER
+AUTH_AUDIENCE
+
+# Optional S3-compatible media storage (legacy / on-prem)
 OBJECT_STORAGE_ENDPOINT
 OBJECT_STORAGE_BUCKET
 OBJECT_STORAGE_ACCESS_KEY
 OBJECT_STORAGE_SECRET_KEY
+OBJECT_STORAGE_REGION
+OBJECT_STORAGE_FORCE_PATH_STYLE
 ```
 
 Actual variable names must be centralized in a validated environment schema.
+
+In the Cloudflare Workers runtime the `DB` D1 binding and `MEDIA_BUCKET` R2 binding are read from `wrangler.jsonc` and the request context.
+
+## Cloudflare deployment steps
+
+1. Install dependencies:
+
+   ```bash
+   pnpm install
+   ```
+
+2. Create and configure D1 databases (one per environment) and update `wrangler.jsonc` with the `database_id` values.
+
+   ```bash
+   pnpm exec wrangler d1 create family-social-db
+   pnpm exec wrangler d1 create family-social-db-staging
+   pnpm exec wrangler d1 create family-social-db-prod
+   ```
+
+3. Apply migrations to each D1 database:
+
+   ```bash
+   pnpm exec wrangler d1 migrations apply family-social-db --local
+   pnpm exec wrangler d1 migrations apply family-social-db-staging
+   pnpm exec wrangler d1 migrations apply family-social-db-prod
+   ```
+
+   For production, run without `--local` and confirm.
+
+4. Create R2 buckets for media and update `wrangler.jsonc` bucket names:
+
+   ```bash
+   pnpm exec wrangler r2 bucket create family-social-media
+   pnpm exec wrangler r2 bucket create family-social-media-staging
+   pnpm exec wrangler r2 bucket create family-social-media-prod
+   ```
+
+5. Set secrets (do not commit them):
+
+   ```bash
+   pnpm exec wrangler secret put AUTH_JWKS_URI
+   pnpm exec wrangler secret put OBJECT_STORAGE_ACCESS_KEY
+   pnpm exec wrangler secret put OBJECT_STORAGE_SECRET_KEY
+   ```
+
+6. Build and deploy:
+
+   ```bash
+   pnpm deploy:cloudflare
+   ```
+
+   This runs `vite build` (SPA into `dist/`) and then `wrangler deploy`,
+   which bundles `src/worker.ts` directly. Use `--env staging` or
+   `--env production` (for example `pnpm exec wrangler deploy --env staging`)
+   to target the matching environment in `wrangler.jsonc`.
+
+7. Verify the bundle with a dry-run before a real deploy:
+
+   ```bash
+   pnpm build:cloudflare
+   ```
+
+## Local development
+
+1. Create `.env` from `.env.example`.
+
+2. Run migrations against a local SQLite file:
+
+   ```bash
+   pnpm db:migrate
+   ```
+
+3. Start the development servers:
+
+   ```bash
+   pnpm dev
+   ```
+
+   This starts the Hono API server (`tsx watch src/server/index.ts`) on
+   `http://localhost:3000` and the Vite dev server on
+   `http://localhost:5173`, which proxies `/api/*` to the API server.
+   Local data uses the libsql `DATABASE_URL` (for example `file:./dev.db`).
+
+   For a production-faithful local run with real D1/R2 bindings, build the
+   SPA and start the Workers runtime instead:
+
+   ```bash
+   pnpm db:apply:local
+   pnpm preview:cloudflare   # vite build + wrangler dev
+   ```
+
+4. To serve the production build on plain Node (no Cloudflare):
+
+   ```bash
+   pnpm build
+   pnpm start                # serves dist/ and /api/* on PORT (default 3000)
+   ```
+
+5. Run tests:
+
+   ```bash
+   pnpm test
+   ```
 
 ## Deployment order with migrations
 
@@ -70,11 +188,10 @@ Readiness should verify critical application dependencies without causing expens
 
 ## Backup
 
-Production PostgreSQL requires automated backups.
+Production D1 data should be exported regularly.
 
 Minimum operational requirement:
 
-- regular snapshot/PITR capability as supported by provider
 - documented retention
 - restore procedure tested before production reliance
 

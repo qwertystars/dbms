@@ -14,7 +14,7 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./tests/setup.ts"],
     env: {
-      DATABASE_URL: "postgres://postgres:postgres@localhost:5433/family_social_test",
+      DATABASE_URL: ":memory:",
       APP_BASE_URL: "http://localhost:3000",
       NODE_ENV: "test",
       AUTH_ISSUER: "http://localhost:3000",

@@ -9,25 +9,11 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16.3-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: family_social_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 2s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -37,17 +23,16 @@ jobs:
       - run: pnpm lint
       - run: pnpm type-check
       - run: pnpm db:generate
-        env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/family_social_test
       - run: pnpm db:migrate
         env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/family_social_test
-      - run: pnpm build
+          DATABASE_URL: "file:./ci.db"
+      - run: pnpm build:cloudflare
         env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/family_social_test
-          APP_BASE_URL: http://localhost:3000
+          DATABASE_URL: "file:./dev.db"
+          APP_BASE_URL: "http://localhost:3000"
+          AUTH_JWKS: ${{ secrets.AUTH_JWKS_TEST }}
       - run: pnpm test
         env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/family_social_test
-          APP_BASE_URL: http://localhost:3000
+          DATABASE_URL: ":memory:"
+          APP_BASE_URL: "http://localhost:3000"
           AUTH_JWKS: ${{ secrets.AUTH_JWKS_TEST }}

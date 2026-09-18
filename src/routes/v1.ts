@@ -1,7 +1,7 @@
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { app } from "~/lib/hono";
-import { Errors, AppError } from "~/lib/errors";
+import { Errors } from "~/lib/errors";
 import {
   familyCreateSchema,
   familyUpdateSchema,
@@ -29,7 +29,6 @@ import * as friendsService from "~/modules/friends/service";
 import * as mediaService from "~/modules/media/service";
 import * as exportService from "~/modules/export/service";
 import type { Account } from "~/lib/context";
-import { getRequestId } from "~/lib/context";
 import { getFamily } from "~/modules/families/service";
 
 function requireAccount(c: any): Account {
@@ -241,17 +240,26 @@ app.delete(
 );
 
 // Tree
-app.get("/families/:familyId/tree", zValidator("param", familyIdParam), async (c) => {
-  const account = requireAccount(c);
-  const { familyId } = c.req.valid("param");
-  const membership = await familyService.getMembership(familyId, account.id);
-  if (!membership) throw Errors.FORBIDDEN();
-  const rootPersonId = c.req.query("rootPersonId");
-  const direction = (c.req.query("direction") as any) || "both";
-  const depth = parseInt(c.req.query("depth") || "100", 10);
-  const tree = await treeService.getTree(familyId, rootPersonId, direction, depth);
-  return c.json(tree);
+const treeQuery = z.object({
+  rootPersonId: uuidSchema.optional(),
+  direction: z.enum(["ancestors", "descendants", "both"]).default("both"),
+  depth: z.coerce.number().int().min(1).max(100).default(100),
 });
+
+app.get(
+  "/families/:familyId/tree",
+  zValidator("param", familyIdParam),
+  zValidator("query", treeQuery),
+  async (c) => {
+    const account = requireAccount(c);
+    const { familyId } = c.req.valid("param");
+    const membership = await familyService.getMembership(familyId, account.id);
+    if (!membership) throw Errors.FORBIDDEN();
+    const { rootPersonId, direction, depth } = c.req.valid("query");
+    const tree = await treeService.getTree(familyId, rootPersonId, direction, depth);
+    return c.json(tree);
+  },
+);
 
 app.post(
   "/families/:familyId/relationships/parent-child",

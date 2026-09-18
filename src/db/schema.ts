@@ -1,96 +1,111 @@
 import {
-  pgTable,
-  uuid,
+  sqliteTable,
   text,
-  timestamp,
   integer,
-  pgEnum,
+  real,
   uniqueIndex,
   index,
   check,
-  bigint,
-  date,
-  numeric,
   primaryKey,
-  jsonb,
-} from "drizzle-orm/pg-core";
+} from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
+import { nanoid } from "nanoid";
 
-export const familyRoleEnum = pgEnum("family_role", ["CREATOR", "EDITOR", "VIEWER"]);
-export const invitationRoleEnum = pgEnum("invitation_role", ["EDITOR", "VIEWER"]);
-export const reactionTypeEnum = pgEnum("reaction_type", ["LIKE", "LOVE", "LAUGH", "SAD"]);
-export const mediaPurposeEnum = pgEnum("media_purpose", [
-  "ACCOUNT_AVATAR",
-  "PERSON_PROFILE",
-  "POST_ATTACHMENT",
-]);
-export const mediaStatusEnum = pgEnum("media_status", ["PENDING", "READY", "DELETING", "DELETED"]);
-export const friendRequestStatusEnum = pgEnum("friend_request_status", [
-  "PENDING",
-  "ACCEPTED",
-  "REJECTED",
-  "CANCELLED",
-]);
+export const familyRoleEnum = ["CREATOR", "EDITOR", "VIEWER"] as const;
+export const invitationRoleEnum = ["EDITOR", "VIEWER"] as const;
+export const reactionTypeEnum = ["LIKE", "LOVE", "LAUGH", "SAD"] as const;
+export const mediaPurposeEnum = ["ACCOUNT_AVATAR", "PERSON_PROFILE", "POST_ATTACHMENT"] as const;
+export const mediaStatusEnum = ["PENDING", "READY", "DELETING", "DELETED"] as const;
+export const friendRequestStatusEnum = ["PENDING", "ACCEPTED", "REJECTED", "CANCELLED"] as const;
 
-export const accounts = pgTable("accounts", {
-  id: uuid("id").primaryKey().defaultRandom(),
+export type FamilyRole = (typeof familyRoleEnum)[number];
+export type InvitationRole = (typeof invitationRoleEnum)[number];
+export type ReactionType = (typeof reactionTypeEnum)[number];
+export type MediaPurpose = (typeof mediaPurposeEnum)[number];
+export type MediaStatus = (typeof mediaStatusEnum)[number];
+export type FriendRequestStatus = (typeof friendRequestStatusEnum)[number];
+
+export const accounts = sqliteTable("accounts", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => nanoid()),
   authSubject: text("auth_subject").notNull().unique(),
   displayName: text("display_name").notNull(),
-  avatarMediaId: uuid("avatar_media_id"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  avatarMediaId: text("avatar_media_id"),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
 });
 
-export const families = pgTable("families", {
-  id: uuid("id").primaryKey().defaultRandom(),
+export const families = sqliteTable("families", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => nanoid()),
   name: text("name").notNull(),
   description: text("description"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  deletedAt: integer("deleted_at", { mode: "timestamp" }),
 });
 
-export const mediaAssets = pgTable("media_assets", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  ownerAccountId: uuid("owner_account_id")
+export const mediaAssets = sqliteTable("media_assets", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => nanoid()),
+  ownerAccountId: text("owner_account_id")
     .notNull()
     .references(() => accounts.id),
-  familyId: uuid("family_id").references(() => families.id),
-  purpose: mediaPurposeEnum("purpose").notNull(),
+  familyId: text("family_id").references(() => families.id),
+  purpose: text("purpose", { enum: mediaPurposeEnum }).notNull(),
   objectKey: text("object_key").notNull().unique(),
   mimeType: text("mime_type").notNull(),
-  byteSize: bigint("byte_size", { mode: "number" }).notNull(),
+  byteSize: integer("byte_size").notNull(),
   sha256: text("sha256"),
-  status: mediaStatusEnum("status").notNull().default("PENDING"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  readyAt: timestamp("ready_at", { withTimezone: true }),
+  status: text("status", { enum: mediaStatusEnum }).notNull().default("PENDING"),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  readyAt: integer("ready_at", { mode: "timestamp" }),
 });
 
-export const people = pgTable(
+export const people = sqliteTable(
   "people",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    familyId: uuid("family_id")
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => nanoid()),
+    familyId: text("family_id")
       .notNull()
       .references(() => families.id),
     name: text("name").notNull(),
     gender: text("gender").notNull(),
-    dateOfBirth: date("date_of_birth"),
-    dateOfDeath: date("date_of_death"),
-    heightCm: numeric("height_cm"),
-    weightKg: numeric("weight_kg"),
+    dateOfBirth: text("date_of_birth"),
+    dateOfDeath: text("date_of_death"),
+    heightCm: real("height_cm"),
+    weightKg: real("weight_kg"),
     address: text("address"),
     email: text("email"),
     phone: text("phone"),
     occupation: text("occupation"),
     biography: text("biography"),
-    profileMediaId: uuid("profile_media_id").references(() => mediaAssets.id),
-    createdByAccountId: uuid("created_by_account_id")
+    profileMediaId: text("profile_media_id").references(() => mediaAssets.id),
+    createdByAccountId: text("created_by_account_id")
       .notNull()
       .references(() => accounts.id),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    deletedAt: integer("deleted_at", { mode: "timestamp" }),
   },
   (table) => ({
     familyDeletedAtIdx: index("people_family_id_deleted_at").on(table.familyId, table.deletedAt),
@@ -101,20 +116,24 @@ export const people = pgTable(
   }),
 );
 
-export const familyMemberships = pgTable(
+export const familyMemberships = sqliteTable(
   "family_memberships",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    familyId: uuid("family_id")
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => nanoid()),
+    familyId: text("family_id")
       .notNull()
       .references(() => families.id),
-    accountId: uuid("account_id")
+    accountId: text("account_id")
       .notNull()
       .references(() => accounts.id),
-    personId: uuid("person_id").references(() => people.id),
-    role: familyRoleEnum("role").notNull(),
-    joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
-    removedAt: timestamp("removed_at", { withTimezone: true }),
+    personId: text("person_id").references(() => people.id),
+    role: text("role", { enum: familyRoleEnum }).notNull(),
+    joinedAt: integer("joined_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    removedAt: integer("removed_at", { mode: "timestamp" }),
   },
   (table) => ({
     familyAccountActiveUq: uniqueIndex("family_memberships_family_account_active")
@@ -130,41 +149,49 @@ export const familyMemberships = pgTable(
   }),
 );
 
-export const familyInvitations = pgTable("family_invitations", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  familyId: uuid("family_id")
+export const familyInvitations = sqliteTable("family_invitations", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => nanoid()),
+  familyId: text("family_id")
     .notNull()
     .references(() => families.id),
-  createdByAccountId: uuid("created_by_account_id")
+  createdByAccountId: text("created_by_account_id")
     .notNull()
     .references(() => accounts.id),
   invitedEmail: text("invited_email"),
-  role: invitationRoleEnum("role").notNull(),
+  role: text("role", { enum: invitationRoleEnum }).notNull(),
   tokenHash: text("token_hash").notNull().unique(),
-  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
-  acceptedByAccountId: uuid("accepted_by_account_id").references(() => accounts.id),
-  revokedAt: timestamp("revoked_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+  acceptedAt: integer("accepted_at", { mode: "timestamp" }),
+  acceptedByAccountId: text("accepted_by_account_id").references(() => accounts.id),
+  revokedAt: integer("revoked_at", { mode: "timestamp" }),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
 });
 
-export const parentChildRelationships = pgTable(
+export const parentChildRelationships = sqliteTable(
   "parent_child_relationships",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    familyId: uuid("family_id")
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => nanoid()),
+    familyId: text("family_id")
       .notNull()
       .references(() => families.id),
-    parentPersonId: uuid("parent_person_id")
+    parentPersonId: text("parent_person_id")
       .notNull()
       .references(() => people.id),
-    childPersonId: uuid("child_person_id")
+    childPersonId: text("child_person_id")
       .notNull()
       .references(() => people.id),
-    createdByAccountId: uuid("created_by_account_id")
+    createdByAccountId: text("created_by_account_id")
       .notNull()
       .references(() => accounts.id),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
   },
   (table) => ({
     uniqueEdge: uniqueIndex("parent_child_family_parent_child_unique").on(
@@ -181,33 +208,39 @@ export const parentChildRelationships = pgTable(
   }),
 );
 
-export const posts = pgTable(
+export const posts = sqliteTable(
   "posts",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    familyId: uuid("family_id")
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => nanoid()),
+    familyId: text("family_id")
       .notNull()
       .references(() => families.id),
-    authorAccountId: uuid("author_account_id")
+    authorAccountId: text("author_account_id")
       .notNull()
       .references(() => accounts.id),
     body: text("body").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    deletedAt: integer("deleted_at", { mode: "timestamp" }),
   },
   (table) => ({
     familyCreatedAtIdx: index("posts_family_id_created_at").on(table.familyId, table.createdAt),
   }),
 );
 
-export const postMedia = pgTable(
+export const postMedia = sqliteTable(
   "post_media",
   {
-    postId: uuid("post_id")
+    postId: text("post_id")
       .notNull()
       .references(() => posts.id),
-    mediaAssetId: uuid("media_asset_id")
+    mediaAssetId: text("media_asset_id")
       .notNull()
       .references(() => mediaAssets.id),
     sortOrder: integer("sort_order").notNull(),
@@ -220,31 +253,39 @@ export const postMedia = pgTable(
   }),
 );
 
-export const comments = pgTable("comments", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  postId: uuid("post_id")
+export const comments = sqliteTable("comments", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => nanoid()),
+  postId: text("post_id")
     .notNull()
     .references(() => posts.id),
-  authorAccountId: uuid("author_account_id")
+  authorAccountId: text("author_account_id")
     .notNull()
     .references(() => accounts.id),
   body: text("body").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  deletedAt: integer("deleted_at", { mode: "timestamp" }),
 });
 
-export const reactions = pgTable(
+export const reactions = sqliteTable(
   "reactions",
   {
-    postId: uuid("post_id")
+    postId: text("post_id")
       .notNull()
       .references(() => posts.id),
-    accountId: uuid("account_id")
+    accountId: text("account_id")
       .notNull()
       .references(() => accounts.id),
-    type: reactionTypeEnum("type").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    type: text("type", { enum: reactionTypeEnum }).notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
   },
   (table) => ({
     pk: primaryKey({
@@ -254,19 +295,23 @@ export const reactions = pgTable(
   }),
 );
 
-export const friendRequests = pgTable(
+export const friendRequests = sqliteTable(
   "friend_requests",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    senderAccountId: uuid("sender_account_id")
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => nanoid()),
+    senderAccountId: text("sender_account_id")
       .notNull()
       .references(() => accounts.id),
-    receiverAccountId: uuid("receiver_account_id")
+    receiverAccountId: text("receiver_account_id")
       .notNull()
       .references(() => accounts.id),
-    status: friendRequestStatusEnum("status").notNull().default("PENDING"),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    status: text("status", { enum: friendRequestStatusEnum }).notNull().default("PENDING"),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    resolvedAt: integer("resolved_at", { mode: "timestamp" }),
   },
   (table) => ({
     noSelfCheck: check(
@@ -280,16 +325,18 @@ export const friendRequests = pgTable(
   }),
 );
 
-export const friendships = pgTable(
+export const friendships = sqliteTable(
   "friendships",
   {
-    accountLowId: uuid("account_low_id")
+    accountLowId: text("account_low_id")
       .notNull()
       .references(() => accounts.id),
-    accountHighId: uuid("account_high_id")
+    accountHighId: text("account_high_id")
       .notNull()
       .references(() => accounts.id),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
   },
   (table) => ({
     pk: primaryKey({
@@ -300,18 +347,22 @@ export const friendships = pgTable(
   }),
 );
 
-export const auditEvents = pgTable(
+export const auditEvents = sqliteTable(
   "audit_events",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    familyId: uuid("family_id").references(() => families.id),
-    actorAccountId: uuid("actor_account_id").references(() => accounts.id),
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => nanoid()),
+    familyId: text("family_id").references(() => families.id),
+    actorAccountId: text("actor_account_id").references(() => accounts.id),
     action: text("action").notNull(),
     targetType: text("target_type").notNull(),
-    targetId: uuid("target_id"),
-    summary: jsonb("summary").notNull(),
+    targetId: text("target_id"),
+    summary: text("summary", { mode: "json" }).notNull(),
     requestId: text("request_id").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
   },
   (table) => ({
     familyCreatedAtIdx: index("audit_events_family_id_created_at").on(

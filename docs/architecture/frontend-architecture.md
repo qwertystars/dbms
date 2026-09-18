@@ -85,3 +85,10 @@ Do not introduce a global client store for all application data.
 Use optimistic updates only where rollback behavior is clear, such as reactions.
 
 Do not optimistically mutate ancestry edges before server validation because cycle checks may reject the operation.
+
+## Visual design system
+
+- All styling lives in `src/client/styles.css`: design tokens on `:root`, a dark-mode token override under `prefers-color-scheme: dark`, and plain component classes. Do not add inline color values; use the tokens.
+- Reusable React pieces live in `src/client/components/ui.tsx`. Prefer extending these over one-off markup.
+- Every data-loading page renders `Loading` while fetching, `ErrorState` when its primary data fails, and `EmptyState` for empty lists.
+- Layouts must work at phone width (360px) without horizontal scrolling.

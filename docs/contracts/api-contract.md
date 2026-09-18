@@ -163,10 +163,13 @@ Role: Creator only.
 Optional query:
 
 - `rootPersonId`
-- `direction=ancestors|descendants|both`
-- `depth`
+- `direction=ancestors|descendants|both` (default `both`; any other value is `400`)
+- `depth` integer 1-100 (default 100), the number of generations to walk from the root
 
 Response contains normalized `people[]` and `edges[]`.
+
+- Without `rootPersonId`: every non-deleted person in the family, including people with no relationships, and every edge between them. `direction` and `depth` are ignored.
+- With `rootPersonId`: the root plus its ancestors and/or descendants up to `depth` generations, and the edges between the returned people. Unknown or deleted root is `404`.
 
 ### API-TREE-02 — Add parent/child edge
 
@@ -284,9 +287,13 @@ Body:
 }
 ```
 
+Returns `201` with `{ request, accepted: false }`. If the receiver already has a pending request to the sender, that request is accepted instead and the response is `{ request, friendship, accepted: true }`. Unknown `accountId` is `404`; sending to yourself is `409 FRIEND_SELF`.
+
 ### API-FRIEND-02
 
 `GET /friends/requests`
+
+Pending requests sent or received by the caller. Each request also includes `sender` and `receiver` objects of the form `{ id, displayName }`.
 
 ### API-FRIEND-03
 
@@ -303,6 +310,8 @@ Body:
 ### API-FRIEND-06
 
 `GET /friends`
+
+Each friendship row also includes `friend: { id, displayName }` for the other account.
 
 ### API-FRIEND-07
 

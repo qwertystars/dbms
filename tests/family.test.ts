@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
-import { getTableName, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { db } from "~/lib/db";
 import * as schema from "~/db/schema";
 import { setup } from "./setup";
@@ -8,9 +8,7 @@ import { apiRequest, getTestToken } from "./helpers";
 beforeAll(setup);
 
 beforeEach(async () => {
-  // Clear all data between tests. Keep account/enum types.
   for (const table of [
-    schema.auditEvents,
     schema.postMedia,
     schema.reactions,
     schema.comments,
@@ -19,13 +17,14 @@ beforeEach(async () => {
     schema.people,
     schema.familyInvitations,
     schema.familyMemberships,
-    schema.families,
-    schema.mediaAssets,
+    schema.auditEvents,
     schema.friendships,
     schema.friendRequests,
+    schema.mediaAssets,
+    schema.families,
     schema.accounts,
   ]) {
-    await db.execute(sql`TRUNCATE TABLE ${sql.identifier(getTableName(table))} CASCADE`);
+    await db.run(sql`DELETE FROM ${table}`);
   }
 });
 

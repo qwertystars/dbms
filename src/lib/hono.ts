@@ -2,10 +2,12 @@ import { Hono } from "hono";
 import type { RequestContext } from "~/lib/context";
 import { getOrCreateAccount } from "~/modules/accounts/service";
 import { verifyAccessToken } from "~/lib/auth";
-import { db } from "~/lib/db";
-import { AppError, Errors } from "~/lib/errors";
+import { createDb } from "~/lib/db";
+import { env } from "~/lib/env";
+import type { D1Database } from "@cloudflare/workers-types";
+import { AppError } from "~/lib/errors";
 import { log } from "~/lib/logger";
-import { getRequestId } from "~/lib/context";
+import { getRequestId, runWithContext } from "~/lib/context";
 
 interface RateLimitWindow {
   count: number;
@@ -27,16 +29,28 @@ export const app = new Hono().basePath("/api/v1");
 app.use(async (c, next) => {
   const requestId = crypto.randomUUID();
   const requestStart = performance.now();
-  c.set("ctx", {
-    db,
-    requestId,
-    requestStart,
-  });
+  const d1 = (c.env as any)?.DB as D1Database | undefined;
+  const connectionString = env.DATABASE_URL;
+  const dbInput = d1 ?? connectionString;
+  if (!dbInput) {
+    return c.json(
+      {
+        error: {
+          code: "DATABASE_NOT_CONFIGURED",
+          message: "No database connection is configured.",
+        },
+      },
+      500,
+    );
+  }
+  const requestDb = await createDb(dbInput as any);
+  const ctx: RequestContext = { db: requestDb, requestId, requestStart };
+  c.set("ctx", ctx);
   c.header("X-Content-Type-Options", "nosniff");
   c.header("X-Frame-Options", "DENY");
   c.header("Referrer-Policy", "strict-origin-when-cross-origin");
   c.header("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
-  await next();
+  await runWithContext(ctx, next);
 });
 
 function extractToken(c: any): string | undefined {
@@ -104,7 +118,7 @@ app.use(async (c, next) => {
   });
 });
 
-app.onError((err, c) => {
+export function apiErrorHandler(err: Error, c: any) {
   const ctx = c.get("ctx");
   const requestId = ctx?.requestId ?? getRequestId();
   const status = err instanceof AppError ? err.status : 500;
@@ -124,9 +138,9 @@ app.onError((err, c) => {
   }
 
   return c.json({ error: { code, message, requestId } }, status as any);
-});
+}
 
-app.notFound((c) => {
+export function apiNotFoundHandler(c: any) {
   const ctx = c.get("ctx");
   return c.json(
     {
@@ -134,4 +148,8 @@ app.notFound((c) => {
     },
     404,
   );
-});
+}
+
+app.onError(apiErrorHandler);
+
+app.notFound(apiNotFoundHandler);

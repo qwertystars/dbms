@@ -1,11 +1,17 @@
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import { db } from "~/lib/db";
-import { friendRequests, friendships } from "~/db/schema";
+import { accounts, friendRequests, friendships } from "~/db/schema";
 import { Errors } from "~/lib/errors";
 import type { Account } from "~/lib/context";
 
 export async function sendFriendRequest(account: Account, receiverAccountId: string) {
   if (account.id === receiverAccountId) throw Errors.FRIEND_SELF();
+  const receiver = await db
+    .select({ id: accounts.id })
+    .from(accounts)
+    .where(eq(accounts.id, receiverAccountId))
+    .limit(1);
+  if (receiver.length === 0) throw Errors.NOT_FOUND("No account exists with that ID.");
   return await db.transaction(async (tx) => {
     const existingAccepted = await tx
       .select()
@@ -51,7 +57,8 @@ export async function sendFriendRequest(account: Account, receiverAccountId: str
       )
       .limit(1);
     if (reverse.length > 0) {
-      return await acceptFriendRequestTx(tx, account, reverse[0].id);
+      // They already asked us, so sending a request back accepts theirs.
+      return { ...(await acceptFriendRequestTx(tx, account, reverse[0].id)), accepted: true };
     }
 
     const [request] = await tx
@@ -80,7 +87,14 @@ export async function listFriendRequests(account: Account) {
       ),
     )
     .orderBy(friendRequests.createdAt);
-  return rows;
+  const summaries = await accountSummaries(
+    rows.flatMap((r) => [r.senderAccountId, r.receiverAccountId]),
+  );
+  return rows.map((r) => ({
+    ...r,
+    sender: summaries.get(r.senderAccountId) ?? unknownAccount(r.senderAccountId),
+    receiver: summaries.get(r.receiverAccountId) ?? unknownAccount(r.receiverAccountId),
+  }));
 }
 
 export async function acceptFriendRequest(account: Account, requestId: string) {
@@ -155,7 +169,32 @@ export async function listFriends(account: Account) {
     .from(friendships)
     .where(or(eq(friendships.accountLowId, account.id), eq(friendships.accountHighId, account.id)))
     .orderBy(friendships.createdAt);
-  return rows;
+  const otherId = (f: (typeof rows)[number]) =>
+    f.accountLowId === account.id ? f.accountHighId : f.accountLowId;
+  const summaries = await accountSummaries(rows.map(otherId));
+  return rows.map((f) => ({
+    ...f,
+    friend: summaries.get(otherId(f)) ?? unknownAccount(otherId(f)),
+  }));
+}
+
+interface AccountSummary {
+  id: string;
+  displayName: string;
+}
+
+async function accountSummaries(ids: string[]): Promise<Map<string, AccountSummary>> {
+  const unique = Array.from(new Set(ids));
+  if (unique.length === 0) return new Map();
+  const rows = await db
+    .select({ id: accounts.id, displayName: accounts.displayName })
+    .from(accounts)
+    .where(inArray(accounts.id, unique));
+  return new Map(rows.map((r) => [r.id, r]));
+}
+
+function unknownAccount(id: string): AccountSummary {
+  return { id, displayName: "Unknown account" };
 }
 
 export async function unfriend(account: Account, friendAccountId: string) {

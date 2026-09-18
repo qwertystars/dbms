@@ -2,13 +2,22 @@
 
 Working title for a private social application centered on family trees, family-member profiles, family-scoped posts, and account-to-account friendships.
 
-## Project mode
+## Project status
 
-**GREENFIELD**
+Version 1.0 is implemented: a Vite + React single-page app (`src/client/`) and a Hono API (`src/server/`, `src/routes/`) on SQLite (libsql locally, Cloudflare D1 in production). See `docs/execution/current-state.md` for exactly what exists and the known gaps.
 
-No application code, database, deployment, or existing production behavior was provided. The only current artifacts are the project description and the supplied handwritten concept sketch.
+## Running locally
 
-The sketch is treated as requirement evidence, not as an implemented system.
+```bash
+pnpm install
+cp .env.example .env   # DATABASE_URL=file:./dev.db; do not add NODE_ENV
+pnpm db:migrate        # creates dev.db
+pnpm dev               # API on :3000, web app on http://localhost:5173
+```
+
+Open http://localhost:5173 and use the development sign-in (any user ID works).
+
+Checks: `pnpm format:check && pnpm lint && pnpm type-check && pnpm test`.
 
 ## Core product idea
 
@@ -41,4 +50,4 @@ Start with:
 3. `docs/product/product-spec.md`
 4. `docs/execution/current-state.md`
 
-The project is specified before implementation. Agents must not treat intended behavior as already implemented.
+Agents must not treat intended behavior in the specification as implemented unless `current-state.md` says so.

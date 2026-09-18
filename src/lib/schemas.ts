@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const uuidSchema = z.string().uuid();
+export const uuidSchema = z.string().min(1).max(64);
 
 export const roleSchema = z.enum(["CREATOR", "EDITOR", "VIEWER"]);
 export const invitationRoleSchema = z.enum(["EDITOR", "VIEWER"]);

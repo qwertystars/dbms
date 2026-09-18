@@ -1,0 +1,310 @@
+import { useCallback, useRef, useState, type ReactNode } from "react";
+
+// Small, dependency-free UI building blocks shared by every page.
+// Styling lives in src/client/styles.css.
+
+export function Loading({ label = "Loading…" }: { label?: string }) {
+  return (
+    <div className="loading" role="status">
+      <span className="spinner" aria-hidden="true" />
+      <span>{label}</span>
+    </div>
+  );
+}
+
+export function Alert({
+  kind = "error",
+  children,
+  onClose,
+}: {
+  kind?: "error" | "success" | "info";
+  children: ReactNode;
+  onClose?: () => void;
+}) {
+  return (
+    <div className={`alert alert-${kind}`} role={kind === "error" ? "alert" : "status"}>
+      <div>{children}</div>
+      {onClose && (
+        <button type="button" className="alert-close" onClick={onClose} aria-label="Dismiss">
+          ×
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function EmptyState({ title, children }: { title: string; children?: ReactNode }) {
+  return (
+    <div className="empty">
+      <p className="empty-title">{title}</p>
+      {children && <p>{children}</p>}
+    </div>
+  );
+}
+
+/** Full-page error used when a route's primary data cannot be loaded. */
+export function ErrorState({ title, message }: { title: string; message: string }) {
+  return (
+    <div className="card">
+      <div className="empty">
+        <p className="empty-title">{title}</p>
+        <p>{message}</p>
+      </div>
+    </div>
+  );
+}
+
+export function PageHeader({
+  eyebrow,
+  title,
+  description,
+  actions,
+}: {
+  eyebrow?: ReactNode;
+  title: ReactNode;
+  description?: ReactNode;
+  actions?: ReactNode;
+}) {
+  return (
+    <header className="page-header">
+      <div>
+        {eyebrow && <span className="eyebrow">{eyebrow}</span>}
+        <h1>{title}</h1>
+        {description && <p>{description}</p>}
+      </div>
+      {actions && <div className="row">{actions}</div>}
+    </header>
+  );
+}
+
+export function Card({
+  title,
+  description,
+  actions,
+  children,
+  flush = false,
+}: {
+  title?: ReactNode;
+  description?: ReactNode;
+  actions?: ReactNode;
+  children: ReactNode;
+  /** Render children without padding, e.g. for edge-to-edge lists. */
+  flush?: boolean;
+}) {
+  return (
+    <section className="card">
+      {title && (
+        <div className="card-header">
+          <div>
+            <h2>{title}</h2>
+            {description && <p>{description}</p>}
+          </div>
+          {actions}
+        </div>
+      )}
+      {flush ? children : <div className="card-body">{children}</div>}
+    </section>
+  );
+}
+
+export function Field({
+  label,
+  optional,
+  hint,
+  className,
+  children,
+}: {
+  label: string;
+  optional?: boolean;
+  hint?: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <label className={`field ${className ?? ""}`}>
+      <span className="field-label">
+        {label}
+        {optional && <span className="optional"> (optional)</span>}
+      </span>
+      {children}
+      {hint && <span className="field-hint">{hint}</span>}
+    </label>
+  );
+}
+
+const ROLE_LABELS: Record<string, string> = {
+  CREATOR: "Creator",
+  EDITOR: "Editor",
+  VIEWER: "Viewer",
+};
+
+export function RoleBadge({ role }: { role: string }) {
+  return <span className={`badge badge-${role.toLowerCase()}`}>{ROLE_LABELS[role] ?? role}</span>;
+}
+
+const AVATAR_COLORS = ["#2e6b4f", "#b8662f", "#4a6fa5", "#8a4f7d", "#5b7c3a", "#a14a4a", "#3f7f86"];
+
+export function initials(name: string | null | undefined): string {
+  const parts = (name ?? "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  const first = parts[0][0] ?? "";
+  const last = parts.length > 1 ? parts[parts.length - 1][0] ?? "" : "";
+  return (first + last).toUpperCase();
+}
+
+export function Avatar({
+  name,
+  size = "md",
+}: {
+  name: string | null | undefined;
+  size?: "sm" | "md" | "lg";
+}) {
+  const key = name ?? "";
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) | 0;
+  const color = AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+  return (
+    <span
+      className={`avatar${size === "md" ? "" : ` avatar-${size}`}`}
+      style={{ background: color }}
+      aria-hidden="true"
+    >
+      {initials(name)}
+    </span>
+  );
+}
+
+export function CopyField({ value, label }: { value: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  async function copy() {
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(value);
+      ok = true;
+    } catch {
+      // The Clipboard API needs a secure context; fall back to a selection copy.
+      inputRef.current?.select();
+      ok = document.execCommand?.("copy") ?? false;
+    }
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } else {
+      inputRef.current?.select();
+    }
+  }
+  return (
+    <div className="copy-box">
+      <input
+        ref={inputRef}
+        className="input"
+        readOnly
+        value={value}
+        aria-label={label}
+        onFocus={(e) => e.currentTarget.select()}
+      />
+      <button type="button" className="btn" onClick={() => void copy()}>
+        {copied ? "Copied" : "Copy"}
+      </button>
+    </div>
+  );
+}
+
+/** Tracks an in-flight async action so buttons can show a pending state. */
+export function useBusy(): [boolean, <T>(fn: () => Promise<T>) => Promise<T | undefined>] {
+  const [busy, setBusy] = useState(false);
+  const run = useCallback(async <T,>(fn: () => Promise<T>) => {
+    setBusy(true);
+    try {
+      return await fn();
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+  return [busy, run];
+}
+
+/** Formats an ISO date (YYYY-MM-DD) without timezone shifts. */
+export function formatDate(value: string | null | undefined): string {
+  if (!value) return "";
+  const [y, m, d] = value.split("-").map(Number);
+  if (!y || !m || !d) return value;
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+export function lifeSpan(person: { dateOfBirth?: string | null; dateOfDeath?: string | null }) {
+  const born = person.dateOfBirth?.slice(0, 4);
+  const died = person.dateOfDeath?.slice(0, 4);
+  if (born && died) return `${born} – ${died}`;
+  if (born) return `b. ${born}`;
+  if (died) return `d. ${died}`;
+  return "";
+}
+
+export function timeAgo(value: string | number | Date): string {
+  const date = new Date(value);
+  const seconds = Math.round((Date.now() - date.getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
+export function capitalize(value: string | null | undefined): string {
+  if (!value) return "";
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+// Minimal inline icons (stroke-based, inherit currentColor).
+const iconPaths: Record<string, ReactNode> = {
+  tree: (
+    <>
+      <circle cx="12" cy="5" r="2.5" />
+      <circle cx="6" cy="19" r="2.5" />
+      <circle cx="18" cy="19" r="2.5" />
+      <path d="M12 7.5V12M12 12H6v4.5M12 12h6v4.5" />
+    </>
+  ),
+  users: (
+    <>
+      <circle cx="9" cy="8" r="3.5" />
+      <path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6" />
+      <path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.2c2.1.7 3.5 2.8 3.5 5.8" />
+    </>
+  ),
+  message: <path d="M4 5h16v11H9l-5 4z" />,
+  lock: (
+    <>
+      <rect x="5" y="11" width="14" height="9" rx="2" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    </>
+  ),
+};
+
+export function Icon({ name, size = 18 }: { name: keyof typeof iconPaths; size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {iconPaths[name]}
+    </svg>
+  );
+}

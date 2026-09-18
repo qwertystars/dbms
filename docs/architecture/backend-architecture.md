@@ -9,13 +9,13 @@ This project does not need microservices. Family trees, authorization, social co
 Target stack:
 
 - TypeScript
-- Node.js web runtime
-- Next.js application with server route handlers
-- PostgreSQL
+- Vite + React single-page application (client)
+- Hono HTTP API (Node.js server locally, Cloudflare Workers in deployment)
+- SQLite locally (libsql) / Cloudflare D1 in deployment
 - Drizzle ORM/migrations
 - Zod schemas for request/response validation
 - generated OpenAPI from the API contract layer where practical
-- S3-compatible object storage for media
+- S3-compatible object storage or Cloudflare R2 for media
 - OIDC/OAuth-capable authentication integration
 
 Exact hosting vendor is intentionally not part of domain semantics.

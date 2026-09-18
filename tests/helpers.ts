@@ -1,4 +1,4 @@
-import { SignJWT, importJWK } from "jose";
+import { SignJWT } from "jose";
 import { app } from "~/lib/hono";
 import "~/routes/v1";
 
@@ -30,6 +30,6 @@ export async function apiRequest(method: string, path: string, body?: unknown, t
       body: body ? JSON.stringify(body) : undefined,
     }),
   );
-  const responseBody = await response.json().catch(() => ({}));
+  const responseBody = (await response.json().catch(() => ({}))) as any;
   return { status: response.status, body: responseBody, headers: response.headers };
 }

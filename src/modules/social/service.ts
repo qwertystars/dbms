@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, isNull, lt, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, lt } from "drizzle-orm";
 import { db } from "~/lib/db";
 import { comments, familyMemberships, posts, reactions } from "~/db/schema";
 import { Errors } from "~/lib/errors";
@@ -10,7 +10,8 @@ export interface PostInput {
 }
 
 export async function createPost(account: Account, familyId: string, input: PostInput) {
-  const membership = await requireActiveMembership(account.id, familyId);
+  // Any active member may post, including Viewers (see the permission matrix).
+  await requireActiveMembership(account.id, familyId);
   const [post] = await db
     .insert(posts)
     .values({
@@ -98,7 +99,7 @@ export async function createComment(
   input: CommentInput,
 ) {
   await requireActiveMembership(account.id, familyId);
-  const post = await getPost(account, familyId, postId);
+  await getPost(account, familyId, postId);
   const [comment] = await db
     .insert(comments)
     .values({
@@ -112,7 +113,7 @@ export async function createComment(
 
 export async function listComments(account: Account, familyId: string, postId: string) {
   await requireActiveMembership(account.id, familyId);
-  const post = await getPost(account, familyId, postId);
+  await getPost(account, familyId, postId);
   const rows = await db
     .select()
     .from(comments)
@@ -150,7 +151,7 @@ export async function deleteComment(account: Account, familyId: string, commentI
     where: and(eq(comments.id, commentId), isNull(comments.deletedAt)),
   });
   if (!comment) throw Errors.NOT_FOUND();
-  const post = await getPost(account, familyId, comment.postId);
+  await getPost(account, familyId, comment.postId);
   if (comment.authorAccountId !== account.id && membership.role !== "CREATOR") {
     throw Errors.FORBIDDEN("You can only delete your own comments or moderate as Creator.");
   }

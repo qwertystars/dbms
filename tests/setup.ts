@@ -1,6 +1,6 @@
 import { generateKeyPair, exportJWK } from "jose";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { db } from "~/lib/db";
+import { migrate } from "drizzle-orm/libsql/migrator";
+import { getDb, initDb } from "~/lib/db";
 
 let initialized = false;
 
@@ -17,6 +17,7 @@ export async function setup() {
     (globalThis as any).__testPrivateKey = privateKey;
   }
 
-  await migrate(db, { migrationsFolder: "./db/migrations" });
+  await initDb();
+  await migrate(getDb() as any, { migrationsFolder: "./db/migrations" });
   initialized = true;
 }

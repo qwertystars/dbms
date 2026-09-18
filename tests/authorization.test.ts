@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
-import { eq, getTableName, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "~/lib/db";
 import * as schema from "~/db/schema";
 import { setup } from "./setup";
@@ -9,7 +9,6 @@ beforeAll(setup);
 
 beforeEach(async () => {
   for (const table of [
-    schema.auditEvents,
     schema.postMedia,
     schema.reactions,
     schema.comments,
@@ -18,13 +17,14 @@ beforeEach(async () => {
     schema.people,
     schema.familyInvitations,
     schema.familyMemberships,
-    schema.families,
-    schema.mediaAssets,
+    schema.auditEvents,
     schema.friendships,
     schema.friendRequests,
+    schema.mediaAssets,
+    schema.families,
     schema.accounts,
   ]) {
-    await db.execute(sql`TRUNCATE TABLE ${sql.identifier(getTableName(table))} CASCADE`);
+    await db.run(sql`DELETE FROM ${table}`);
   }
 });
 
@@ -194,7 +194,7 @@ describe("Cross-family isolation", () => {
     const aToken = await getTestToken("a");
     const bToken = await getTestToken("b");
 
-    const { body: aMe } = await apiRequest("GET", "/api/v1/me", undefined, aToken);
+    await apiRequest("GET", "/api/v1/me", undefined, aToken);
     const { body: bMe } = await apiRequest("GET", "/api/v1/me", undefined, bToken);
 
     const { body } = await apiRequest(
@@ -257,5 +257,136 @@ describe("Invitations", () => {
     if (status2 !== 200) console.error("second accept failed", status2, JSON.stringify(body));
     expect(status2).toBe(200);
     expect(body.alreadyMember).toBe(true);
+  });
+});
+
+describe("Viewer social permissions", () => {
+  it("Viewer can post to the family feed and export family data", async () => {
+    const creatorToken = await getTestToken("creator");
+    const familyId = await createFamily(creatorToken);
+    const { targetToken: viewerToken } = await inviteAndAccept(
+      creatorToken,
+      familyId,
+      "viewer",
+      "VIEWER",
+    );
+
+    const post = await apiRequest(
+      "POST",
+      `/api/v1/families/${familyId}/posts`,
+      { body: "Hello from a viewer" },
+      viewerToken,
+    );
+    expect(post.status).toBe(201);
+
+    const exported = await apiRequest(
+      "GET",
+      `/api/v1/families/${familyId}/export?format=json`,
+      undefined,
+      viewerToken,
+    );
+    expect(exported.status).toBe(200);
+  });
+});
+
+describe("Tree projection", () => {
+  async function addPerson(token: string, familyId: string, name: string) {
+    const { body } = await apiRequest(
+      "POST",
+      `/api/v1/families/${familyId}/people`,
+      { name, gender: "other" },
+      token,
+    );
+    return body.person.id as string;
+  }
+
+  async function link(token: string, familyId: string, parent: string, child: string) {
+    await apiRequest(
+      "POST",
+      `/api/v1/families/${familyId}/relationships/parent-child`,
+      { parentPersonId: parent, childPersonId: child },
+      token,
+    );
+  }
+
+  it("includes people without relationships and honours depth", async () => {
+    const token = await getTestToken("creator");
+    const familyId = await createFamily(token);
+    const grandparent = await addPerson(token, familyId, "Grandparent");
+    const parent = await addPerson(token, familyId, "Parent");
+    const child = await addPerson(token, familyId, "Child");
+    const loner = await addPerson(token, familyId, "Unconnected");
+    await link(token, familyId, grandparent, parent);
+    await link(token, familyId, parent, child);
+
+    const whole = await apiRequest("GET", `/api/v1/families/${familyId}/tree`, undefined, token);
+    expect(whole.status).toBe(200);
+    expect(whole.body.people.map((p: any) => p.id).sort()).toEqual(
+      [grandparent, parent, child, loner].sort(),
+    );
+    expect(whole.body.edges).toHaveLength(2);
+
+    const near = await apiRequest(
+      "GET",
+      `/api/v1/families/${familyId}/tree?rootPersonId=${child}&direction=ancestors&depth=1`,
+      undefined,
+      token,
+    );
+    expect(near.status).toBe(200);
+    expect(near.body.people.map((p: any) => p.id).sort()).toEqual([parent, child].sort());
+    expect(near.body.edges).toHaveLength(1);
+  });
+
+  it("rejects an invalid direction", async () => {
+    const token = await getTestToken("creator");
+    const familyId = await createFamily(token);
+    const { status } = await apiRequest(
+      "GET",
+      `/api/v1/families/${familyId}/tree?direction=sideways`,
+      undefined,
+      token,
+    );
+    expect(status).toBe(400);
+  });
+});
+
+describe("Friends", () => {
+  it("rejects a request to an account that does not exist", async () => {
+    const aToken = await getTestToken("a");
+    await apiRequest("GET", "/api/v1/me", undefined, aToken);
+    const { status, body } = await apiRequest(
+      "POST",
+      "/api/v1/friends/requests",
+      { accountId: "does-not-exist" },
+      aToken,
+    );
+    expect(status).toBe(404);
+    expect(body.error.code).toBe("NOT_FOUND");
+  });
+
+  it("returns display names and accepts mutual requests", async () => {
+    const aToken = await getTestToken("a", "Alice");
+    const bToken = await getTestToken("b", "Bob");
+    const { body: aMe } = await apiRequest("GET", "/api/v1/me", undefined, aToken);
+    const { body: bMe } = await apiRequest("GET", "/api/v1/me", undefined, bToken);
+
+    await apiRequest("POST", "/api/v1/friends/requests", { accountId: bMe.id }, aToken);
+    const pending = await apiRequest("GET", "/api/v1/friends/requests", undefined, bToken);
+    expect(pending.body.requests[0].sender).toEqual({ id: aMe.id, displayName: "Alice" });
+    expect(pending.body.requests[0].receiver).toEqual({ id: bMe.id, displayName: "Bob" });
+
+    // Bob "sends" a request back, which accepts Alice's pending one.
+    const mutual = await apiRequest(
+      "POST",
+      "/api/v1/friends/requests",
+      { accountId: aMe.id },
+      bToken,
+    );
+    expect(mutual.status).toBe(201);
+    expect(mutual.body.accepted).toBe(true);
+
+    const friends = await apiRequest("GET", "/api/v1/friends", undefined, aToken);
+    expect(friends.body.friends).toHaveLength(1);
+    expect(friends.body.friends[0].friend).toEqual({ id: bMe.id, displayName: "Bob" });
   });
 });

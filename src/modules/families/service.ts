@@ -11,7 +11,6 @@ import type { Account } from "~/lib/context";
 import { hashToken, randomToken } from "~/lib/crypto";
 import { audit } from "~/modules/audit/service";
 import type { Membership } from "~/modules/auth/policy";
-import { getRequestId } from "~/lib/context";
 
 export async function createFamily(
   account: Account,

@@ -4,7 +4,6 @@ import { familyMemberships, mediaAssets, people } from "~/db/schema";
 import { Errors } from "~/lib/errors";
 import type { Account } from "~/lib/context";
 import { audit } from "~/modules/audit/service";
-import type { Membership } from "~/modules/auth/policy";
 
 export interface PersonInput {
   name: string;
@@ -27,10 +26,8 @@ function toDb(input: PersonInput) {
     gender: input.gender,
     dateOfBirth: input.dateOfBirth ?? null,
     dateOfDeath: input.dateOfDeath ?? null,
-    heightCm:
-      input.heightCm !== undefined && input.heightCm !== null ? String(input.heightCm) : null,
-    weightKg:
-      input.weightKg !== undefined && input.weightKg !== null ? String(input.weightKg) : null,
+    heightCm: input.heightCm ?? null,
+    weightKg: input.weightKg ?? null,
     address: input.address ?? null,
     email: input.email ?? null,
     phone: input.phone ?? null,

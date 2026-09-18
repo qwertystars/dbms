@@ -1,0 +1,81 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "family-social-network",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-09-05",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"],
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+  },
+  "vars": {
+    "APP_BASE_URL": "https://family-social-network.YOUR_SUBDOMAIN.workers.dev",
+    "AUTH_ISSUER": "https://family-social-network.YOUR_SUBDOMAIN.workers.dev",
+    "AUTH_AUDIENCE": "family-social-network",
+    "OBJECT_STORAGE_FORCE_PATH_STYLE": "false",
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "family-social-db",
+      "database_id": "<your-d1-database-id>",
+      "migrations_dir": "db/migrations",
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MEDIA_BUCKET",
+      "bucket_name": "family-social-media",
+    },
+  ],
+  "env": {
+    "staging": {
+      "name": "family-social-network-staging",
+      "vars": {
+        "APP_BASE_URL": "https://staging.family-social-network.YOUR_SUBDOMAIN.workers.dev",
+        "AUTH_ISSUER": "https://staging.family-social-network.YOUR_SUBDOMAIN.workers.dev",
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "family-social-db-staging",
+          "database_id": "<your-staging-d1-database-id>",
+          "migrations_dir": "db/migrations",
+        },
+      ],
+      "r2_buckets": [
+        {
+          "binding": "MEDIA_BUCKET",
+          "bucket_name": "family-social-media-staging",
+        },
+      ],
+    },
+    "production": {
+      "name": "family-social-network-prod",
+      "vars": {
+        "APP_BASE_URL": "https://family-social-network.YOUR_SUBDOMAIN.workers.dev",
+        "AUTH_ISSUER": "https://family-social-network.YOUR_SUBDOMAIN.workers.dev",
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "family-social-db-prod",
+          "database_id": "<your-prod-d1-database-id>",
+          "migrations_dir": "db/migrations",
+        },
+      ],
+      "r2_buckets": [
+        {
+          "binding": "MEDIA_BUCKET",
+          "bucket_name": "family-social-media-prod",
+        },
+      ],
+    },
+  },
+}

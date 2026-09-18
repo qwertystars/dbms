@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, ne, notInArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "~/lib/db";
 import { familyMemberships, parentChildRelationships, people } from "~/db/schema";
 import { Errors } from "~/lib/errors";
@@ -27,13 +27,6 @@ export async function addParentChildEdge(
   await verifyPeopleInFamily(familyId, [parentPersonId, childPersonId]);
 
   return await db.transaction(async (tx) => {
-    // Lock the family edges to prevent concurrent cycles.
-    await tx
-      .select()
-      .from(parentChildRelationships)
-      .where(eq(parentChildRelationships.familyId, familyId))
-      .for("update");
-
     // Reject duplicate edge.
     const existing = await tx.query.parentChildRelationships.findFirst({
       where: and(
@@ -45,7 +38,7 @@ export async function addParentChildEdge(
     if (existing) throw Errors.TREE_DUPLICATE_EDGE();
 
     // Cycle detection: child must not already reach parent.
-    const reaches = await tx.execute(sql`
+    const reaches = await tx.all(sql`
       WITH RECURSIVE descendants AS (
         SELECT child_person_id AS id FROM parent_child_relationships
         WHERE family_id = ${familyId} AND parent_person_id = ${childPersonId}
@@ -55,9 +48,9 @@ export async function addParentChildEdge(
         JOIN descendants d ON pcr.parent_person_id = d.id
         WHERE pcr.family_id = ${familyId}
       )
-      SELECT 1 FROM descendants WHERE id = ${parentPersonId} LIMIT 1
+      SELECT 1 AS found FROM descendants WHERE id = ${parentPersonId} LIMIT 1
     `);
-    if (reaches.rows.length > 0) {
+    if (reaches.length > 0) {
       throw Errors.TREE_CYCLE();
     }
 
@@ -129,74 +122,68 @@ export async function getTree(
   direction: "ancestors" | "descendants" | "both" = "both",
   depth = 100,
 ) {
-  if (rootPersonId) {
-    const root = await db.query.people.findFirst({
-      where: and(
-        eq(people.id, rootPersonId),
-        eq(people.familyId, familyId),
-        isNull(people.deletedAt),
-      ),
-    });
-    if (!root) throw Errors.NOT_FOUND();
-  }
-
   const edges = await db.query.parentChildRelationships.findMany({
     where: eq(parentChildRelationships.familyId, familyId),
   });
 
-  let personIds = new Set<string>();
-  if (rootPersonId) personIds.add(rootPersonId);
+  // Without a root, return the whole family: every live person (including
+  // people with no relationships yet) and every edge between live people.
+  if (!rootPersonId) {
+    const allPeople = await db.query.people.findMany({
+      where: and(eq(people.familyId, familyId), isNull(people.deletedAt)),
+    });
+    return { people: allPeople, edges: edgesBetween(allPeople, edges) };
+  }
+
+  const root = await db.query.people.findFirst({
+    where: and(
+      eq(people.id, rootPersonId),
+      eq(people.familyId, familyId),
+      isNull(people.deletedAt),
+    ),
+  });
+  if (!root) throw Errors.NOT_FOUND();
+
+  const maxDepth = Number.isFinite(depth) && depth > 0 ? Math.floor(depth) : 100;
+  const personIds = new Set<string>([rootPersonId]);
 
   if (direction === "both" || direction === "ancestors") {
-    const rows = await db.execute(sql`
-      WITH RECURSIVE ancestors AS (
-        SELECT parent_person_id AS id FROM parent_child_relationships
-        WHERE family_id = ${familyId} AND child_person_id = ${rootPersonId ?? null}::uuid
+    const rows = await db.all(sql`
+      WITH RECURSIVE ancestors(id, depth) AS (
+        SELECT parent_person_id, 1 FROM parent_child_relationships
+        WHERE family_id = ${familyId} AND child_person_id = ${rootPersonId}
         UNION
-        SELECT pcr.parent_person_id
+        SELECT pcr.parent_person_id, a.depth + 1
         FROM parent_child_relationships pcr
         JOIN ancestors a ON pcr.child_person_id = a.id
-        WHERE pcr.family_id = ${familyId}
+        WHERE pcr.family_id = ${familyId} AND a.depth < ${maxDepth}
       )
-      SELECT id FROM ancestors
+      SELECT DISTINCT id FROM ancestors
     `);
-    for (const row of rows.rows) {
+    for (const row of rows) {
       personIds.add((row as { id: string }).id);
     }
   }
 
   if (direction === "both" || direction === "descendants") {
-    const rows = await db.execute(sql`
-      WITH RECURSIVE descendants AS (
-        SELECT child_person_id AS id FROM parent_child_relationships
-        WHERE family_id = ${familyId} AND parent_person_id = ${rootPersonId ?? null}::uuid
+    const rows = await db.all(sql`
+      WITH RECURSIVE descendants(id, depth) AS (
+        SELECT child_person_id, 1 FROM parent_child_relationships
+        WHERE family_id = ${familyId} AND parent_person_id = ${rootPersonId}
         UNION
-        SELECT pcr.child_person_id
+        SELECT pcr.child_person_id, d.depth + 1
         FROM parent_child_relationships pcr
         JOIN descendants d ON pcr.parent_person_id = d.id
-        WHERE pcr.family_id = ${familyId}
+        WHERE pcr.family_id = ${familyId} AND d.depth < ${maxDepth}
       )
-      SELECT id FROM descendants
+      SELECT DISTINCT id FROM descendants
     `);
-    for (const row of rows.rows) {
+    for (const row of rows) {
       personIds.add((row as { id: string }).id);
     }
   }
 
-  // For "both" without root, return entire family graph.
-  if (direction === "both" && !rootPersonId) {
-    const allEdges = edges;
-    personIds = new Set(allEdges.flatMap((e) => [e.parentPersonId, e.childPersonId]));
-  }
-
-  if (personIds.size === 0) {
-    const allPeople = await db.query.people.findMany({
-      where: and(eq(people.familyId, familyId), isNull(people.deletedAt)),
-    });
-    return { people: allPeople, edges };
-  }
-
-  const allPeople = await db.query.people.findMany({
+  const treePeople = await db.query.people.findMany({
     where: and(
       eq(people.familyId, familyId),
       inArray(people.id, Array.from(personIds)),
@@ -204,12 +191,15 @@ export async function getTree(
     ),
   });
 
-  const edgePersonIds = new Set(allPeople.map((p) => p.id));
-  const visibleEdges = edges.filter(
-    (e) => edgePersonIds.has(e.parentPersonId) && edgePersonIds.has(e.childPersonId),
-  );
+  return { people: treePeople, edges: edgesBetween(treePeople, edges) };
+}
 
-  return { people: allPeople, edges: visibleEdges };
+function edgesBetween<T extends { parentPersonId: string; childPersonId: string }>(
+  visiblePeople: { id: string }[],
+  edges: T[],
+): T[] {
+  const ids = new Set(visiblePeople.map((p) => p.id));
+  return edges.filter((e) => ids.has(e.parentPersonId) && ids.has(e.childPersonId));
 }
 
 async function verifyPeopleInFamily(familyId: string, personIds: string[]) {
