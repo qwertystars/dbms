@@ -1,7 +1,0 @@
-All three verification commands pass:
-
-- `pnpm install` — exit 0 (added vitest 4.1.11, better-sqlite3, @types/better-sqlite3, playwright as devDependencies, lockfile updated)
-- `pnpm exec vitest --version` — prints 4.1.11
-- `pnpm typecheck` — exit 0
-
-Files written: `package.json` (+ `"test": "vitest run"`, devDeps), `pnpm-lock.yaml`, `vitest.config.ts` (node env, `test/**/*.test.ts`), `src/index.ts` (`export default {}`). No tsconfig changes needed. Note: pnpm blocked better-sqlite3's build script by default; if schema tests need the native binding later, run `pnpm approve-builds`. No commit made.

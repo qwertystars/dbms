@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm type-check
+      - run: pnpm db:generate
+      - name: Check migrations are in sync with the schema
+        run: git diff --exit-code -- db/migrations
+      - run: pnpm db:migrate
+        env:
+          DATABASE_URL: "file:./ci.db"
+      - run: pnpm build:cloudflare
+        env:
+          DATABASE_URL: "file:./dev.db"
+          APP_BASE_URL: "http://localhost:3000"
+          AUTH_JWKS: ${{ secrets.AUTH_JWKS_TEST }}
+      - run: pnpm test
+        env:
+          DATABASE_URL: ":memory:"
+          APP_BASE_URL: "http://localhost:3000"
+          AUTH_JWKS: ${{ secrets.AUTH_JWKS_TEST }}
