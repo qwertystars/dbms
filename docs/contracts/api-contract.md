@@ -346,14 +346,62 @@ Body includes:
 - MIME type
 - size
 
-Returns short-lived upload instructions. The current implementation returns a placeholder
-local path; S3-compatible/R2 uploads are not wired up yet (see `current-state.md`).
+Authorization: `PERSON_PROFILE` requires Creator or Editor of `familyId`; `POST_ATTACHMENT`
+requires any active membership of `familyId`; `ACCOUNT_AVATAR` must not carry a `familyId`.
+Other callers receive `403`.
+
+Returns `201` with `{ asset, uploadUrl }`. `uploadUrl` is `/api/v1/media/{mediaId}/content`.
 
 ### API-MEDIA-02
 
+`PUT /media/{mediaId}/content`
+
+Raw image bytes as the request body. Owner only (`404` for anyone else). The asset must be
+`PENDING`. The server checks the file's magic bytes against the declared MIME type, removes
+metadata (JPEG APP1/APPn/comments, PNG text/EXIF/time chunks, WebP EXIF/XMP), stores the
+object in R2 (`MEDIA_BUCKET`), records the stored size and SHA-256, and marks the asset
+`READY`. Returns `{ asset }`. `422 MEDIA_INVALID` for a type mismatch, damaged file, empty
+file, oversized file (10 MB) or non-pending asset.
+
+### API-MEDIA-03
+
 `POST /media/{mediaId}/complete`
 
-Marks validated upload as ready.
+Owner only. Idempotent for an asset that is already `READY`. For a `PENDING` asset it succeeds
+only if the object already exists in storage, otherwise `422`.
+
+### API-MEDIA-04
+
+`GET /media/{mediaId}/content`
+
+Streams a `READY` asset. Readable by its owner, by active members of its family for
+family-owned media, and by any signed-in account for account avatars. Every other caller gets
+`404`, so ids reveal nothing. Friendship never grants access. Responses carry
+`Cache-Control: private, max-age=3600`, a `sandbox` CSP and an `ETag` (the SHA-256);
+`If-None-Match` returns `304`.
+
+## Account
+
+### API-ACCOUNT-01
+
+`GET /me` returns the signed-in account.
+
+### API-ACCOUNT-02
+
+`PATCH /me` with `{ displayName }` (1–120 characters after trimming) renames the signed-in
+account and returns it.
+
+## Authentication routes (outside `/api/v1`)
+
+- `GET /api/auth/config` returns `{ provider: "oidc" | "cloudflare-access", devSignIn }` for the
+  sign-in page.
+- `POST /api/auth/logout` clears the development cookie and redirects to `/sign-in`, or to
+  `/cdn-cgi/access/logout` when `AUTH_PROVIDER=cloudflare-access` (and dev sign-in is off).
+- `POST /api/auth/login` exists only when `AUTH_DEV_MODE=true`.
+
+Tokens are accepted from the `Cf-Access-Jwt-Assertion` header (Cloudflare Access), an
+`Authorization: Bearer` header, or the development `auth_token` cookie. All are RS256 JWTs
+checked against the configured JWKS, issuer and audience.
 
 ## HTTP semantics
 

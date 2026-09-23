@@ -171,7 +171,11 @@ export function FamilyPage() {
                   {data.people.map((p: any) => (
                     <li key={p.id}>
                       <Link to={`/app/families/${familyId}/people/${p.id}`} className="list-item">
-                        <Avatar name={p.name} />
+                        <Avatar
+                          name={p.name}
+                          mediaId={p.profileMediaId}
+                          deceased={Boolean(p.dateOfDeath)}
+                        />
                         <div className="list-item-main">
                           <div className="list-item-title">{p.name}</div>
                           <div className="list-item-meta">

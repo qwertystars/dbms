@@ -19,8 +19,10 @@ import {
   friendRequestSchema,
   uploadIntentSchema,
   uploadCompleteSchema,
+  accountUpdateSchema,
   uuidSchema,
 } from "~/lib/schemas";
+import * as accountService from "~/modules/accounts/service";
 import * as familyService from "~/modules/families/service";
 import * as peopleService from "~/modules/people/service";
 import * as treeService from "~/modules/tree/service";
@@ -45,15 +47,22 @@ const commentIdParam = z.object({ familyId: uuidSchema, commentId: uuidSchema })
 const relationshipIdParam = z.object({ familyId: uuidSchema, relationshipId: uuidSchema });
 
 // Accounts
-app.get("/me", (c) => {
-  const account = requireAccount(c);
-  return c.json({
+function serializeMe(account: Account) {
+  return {
     id: account.id,
     authSubject: account.authSubject,
     displayName: account.displayName,
     avatarMediaId: account.avatarMediaId,
     createdAt: account.createdAt,
-  });
+  };
+}
+
+app.get("/me", (c) => c.json(serializeMe(requireAccount(c))));
+
+app.patch("/me", zValidator("json", accountUpdateSchema), async (c) => {
+  const account = requireAccount(c);
+  const updated = await accountService.updateAccount(account, c.req.valid("json"));
+  return c.json(serializeMe(updated));
 });
 
 // Events
@@ -510,6 +519,46 @@ app.post(
     const body = c.req.valid("json");
     const result = await mediaService.completeUpload(account, mediaId, body.sha256);
     return c.json(result);
+  },
+);
+
+app.put(
+  "/media/:mediaId/content",
+  zValidator("param", z.object({ mediaId: uuidSchema })),
+  async (c) => {
+    const account = requireAccount(c);
+    const { mediaId } = c.req.valid("param");
+    const declared = Number(c.req.header("content-length") ?? "0");
+    if (declared > mediaService.MAX_MEDIA_SIZE) {
+      throw Errors.MEDIA_INVALID("File exceeds maximum size.");
+    }
+    const data = new Uint8Array(await c.req.arrayBuffer());
+    const result = await mediaService.uploadContent(account, mediaId, data);
+    return c.json(result);
+  },
+);
+
+app.get(
+  "/media/:mediaId/content",
+  zValidator("param", z.object({ mediaId: uuidSchema })),
+  async (c) => {
+    const account = requireAccount(c);
+    const { mediaId } = c.req.valid("param");
+    const { mimeType, sha256, object } = await mediaService.getContent(account, mediaId);
+    const etag = sha256 ? `"${sha256}"` : undefined;
+    if (etag && c.req.header("if-none-match") === etag) {
+      return c.body(null, 304);
+    }
+    const headers: Record<string, string> = {
+      "Content-Type": mimeType,
+      "Content-Length": String(object.size),
+      // Private family data: never stored by shared caches.
+      "Cache-Control": "private, max-age=3600",
+      "Content-Security-Policy": "default-src 'none'; sandbox",
+      "Content-Disposition": "inline",
+    };
+    if (etag) headers.ETag = etag;
+    return c.body(object.body, 200, headers);
   },
 );
 

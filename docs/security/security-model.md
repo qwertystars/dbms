@@ -30,11 +30,21 @@ Trusted service boundary using least-privilege database credentials.
 
 ### Application server/browser -> object storage
 
-Uploads use short-lived scoped URLs. Permanent credentials never reach the browser.
+The browser never talks to object storage. Uploads and reads go through the Worker
+(`/api/v1/media/{id}/content`), which uses the private R2 binding; no storage credentials
+exist outside Cloudflare.
 
 ### Authentication provider -> application
 
 Authenticated subject claims are mapped to an internal Account.
+
+In production, Cloudflare Access (team `qwertystars`) signs people in with an email one-time
+PIN or Google before any request reaches the Worker, and forwards a signed JWT in
+`Cf-Access-Jwt-Assertion`. The API does not trust Access blindly: it verifies that token's
+RS256 signature against the team JWKS (cached, refetched on unknown `kid`), plus issuer and
+audience (the Access application's AUD tag). A request that bypasses Access therefore has no
+valid token and is treated as anonymous. Access only proves an email address; family access
+is still decided by memberships. See ADR-004.
 
 Do not trust mutable display information as identity.
 
@@ -78,9 +88,13 @@ Profile data should not be indexed publicly.
 - enforce size limits
 - server-generated object keys
 - private bucket by default
-- signed reads or authenticated media proxy for private family assets
-- do not trust file extensions
-- add image re-encoding/scanning if deployment risk warrants it
+- authenticated media proxy for private family assets (implemented: `GET /media/{id}/content`
+  checks family membership and answers `404` otherwise)
+- do not trust file extensions (implemented: magic-byte check against the declared type)
+- strip location and other metadata (implemented: the browser re-encodes photos through a
+  canvas, and the server removes EXIF/XMP/text metadata without re-encoding, since Workers
+  has no image codec)
+- served with `Content-Security-Policy: default-src 'none'; sandbox` and `nosniff`
 
 ## CSRF and session protection
 

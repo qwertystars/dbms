@@ -90,3 +90,7 @@ export const uploadCompleteSchema = z.object({
     .regex(/^[a-fA-F0-9]{64}$/)
     .optional(),
 });
+
+export const accountUpdateSchema = z.object({
+  displayName: z.string().trim().min(1).max(120),
+});

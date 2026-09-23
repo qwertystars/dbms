@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState, type ReactNode } from "react";
+import { mediaUrl } from "~/client/api";
 
 // Small, dependency-free UI building blocks shared by every page.
 // Styling lives in src/client/styles.css.
@@ -142,8 +143,6 @@ export function RoleBadge({ role }: { role: string }) {
   return <span className={`badge badge-${role.toLowerCase()}`}>{ROLE_LABELS[role] ?? role}</span>;
 }
 
-const AVATAR_COLORS = ["#2e6b4f", "#b8662f", "#4a6fa5", "#8a4f7d", "#5b7c3a", "#a14a4a", "#3f7f86"];
-
 export function initials(name: string | null | undefined): string {
   const parts = (name ?? "").trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";
@@ -155,21 +154,21 @@ export function initials(name: string | null | undefined): string {
 export function Avatar({
   name,
   size = "md",
+  mediaId,
+  deceased = false,
 }: {
   name: string | null | undefined;
   size?: "sm" | "md" | "lg";
+  mediaId?: string | null;
+  deceased?: boolean;
 }) {
-  const key = name ?? "";
-  let hash = 0;
-  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) | 0;
-  const color = AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+  const classes = ["avatar"];
+  if (size !== "md") classes.push(`avatar-${size}`);
+  // Someone who has died gets a pencil ring and nothing more (brand spec §3.7).
+  if (deceased) classes.push("avatar-deceased");
   return (
-    <span
-      className={`avatar${size === "md" ? "" : ` avatar-${size}`}`}
-      style={{ background: color }}
-      aria-hidden="true"
-    >
-      {initials(name)}
+    <span className={classes.join(" ")} aria-hidden="true">
+      {mediaId ? <img src={mediaUrl(mediaId)} alt="" loading="lazy" /> : initials(name)}
     </span>
   );
 }
@@ -319,13 +318,15 @@ const iconPaths: Record<string, ReactNode> = {
       <circle cx="12" cy="6.2" r="1.3" />
     </>
   ),
-  candle: (
+  // Remembrance: a plain pencil ring, never a religious symbol (brand spec §3.7).
+  ring: <circle cx="12" cy="12" r="6.5" />,
+  sun: (
     <>
-      <path d="M9 12h6v8H9z" />
-      <path d="M12 12V9.5" />
-      <path d="M12 6.5c1.1 1.1 1.1 2.1 0 3.2-1.1-1.1-1.1-2.1 0-3.2z" />
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" />
     </>
   ),
+  moon: <path d="M19.5 14.5A7.5 7.5 0 0 1 9.5 4.5a7.5 7.5 0 1 0 10 10z" />,
   calendar: (
     <>
       <rect x="3.5" y="5" width="17" height="15.5" rx="2" />
@@ -354,7 +355,7 @@ export function Icon({ name, size = 18 }: { name: keyof typeof iconPaths; size?:
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.8"
+      strokeWidth="1.75"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"

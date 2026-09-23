@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode, type SubmitEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, errorMessage } from "~/client/api";
+import { api, errorMessage, uploadImage } from "~/client/api";
 import { FamilyHeader } from "~/client/components/FamilyNav";
 import {
   Alert,
@@ -45,6 +45,7 @@ export function PersonPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [saving, runSave] = useBusy();
+  const [photoBusy, setPhotoBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -122,6 +123,34 @@ export function PersonPage() {
     setNotice(`${res.body.person.name} was updated.`);
   }
 
+  async function setPhoto(profileMediaId: string | null) {
+    const res = await api("PATCH", `/api/v1/families/${familyId}/people/${personId}`, {
+      profileMediaId,
+    });
+    if (res.status !== 200) {
+      setError(errorMessage(res, "Couldn't save the photo."));
+      return;
+    }
+    setData((prev: any) => ({ ...prev, person: res.body.person }));
+    setError(null);
+    setNotice(profileMediaId ? "Photo saved." : "Photo removed.");
+  }
+
+  async function choosePhoto(file: File | undefined) {
+    if (!file) return;
+    setPhotoBusy(true);
+    try {
+      const upload = await uploadImage(file, "PERSON_PROFILE", familyId);
+      if (!upload.ok) {
+        setError(upload.message);
+        return;
+      }
+      await setPhoto(upload.mediaId);
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
   async function removePerson() {
     if (!window.confirm(`Delete ${p.name}? Their profile and family-tree links will be removed.`)) {
       return;
@@ -141,7 +170,12 @@ export function PersonPage() {
         {list.map((r) => (
           <li key={r.id}>
             <Link to={personLink(r.id)} className="list-item" style={{ padding: "8px 0" }}>
-              <Avatar name={r.name} size="sm" />
+              <Avatar
+                name={r.name}
+                size="sm"
+                mediaId={r.profileMediaId}
+                deceased={Boolean(r.dateOfDeath)}
+              />
               <div className="list-item-main">
                 <div className="list-item-title">{r.name}</div>
                 {lifeSpan(r) && <div className="list-item-meta">{lifeSpan(r)}</div>}
@@ -302,15 +336,41 @@ export function PersonPage() {
           ) : (
             <section className="card card-body stack">
               <div className="profile-head">
-                <Avatar name={p.name} size="lg" />
+                <Avatar
+                  name={p.name}
+                  size="lg"
+                  mediaId={p.profileMediaId}
+                  deceased={Boolean(p.dateOfDeath)}
+                />
                 <div>
                   <p style={{ fontSize: "1.05rem", fontWeight: 550 }}>
                     {[lifeSpan(p), p.occupation].filter(Boolean).join(" · ") || "No details yet"}
                   </p>
-                  {p.dateOfDeath && (
-                    <span className="badge" style={{ marginTop: 8 }}>
-                      Deceased
-                    </span>
+                  {canEdit && (
+                    <div className="photo-actions">
+                      <label className={`btn btn-sm${photoBusy ? " is-disabled" : ""}`}>
+                        {photoBusy ? "Uploading…" : p.profileMediaId ? "Change photo" : "Add photo"}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/gif"
+                          className="visually-hidden"
+                          disabled={photoBusy}
+                          onChange={(e) => {
+                            void choosePhoto(e.currentTarget.files?.[0]);
+                            e.currentTarget.value = "";
+                          }}
+                        />
+                      </label>
+                      {p.profileMediaId && !photoBusy && (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => void setPhoto(null)}
+                        >
+                          Remove photo
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
