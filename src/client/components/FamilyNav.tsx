@@ -39,6 +39,8 @@ export function FamilyHeader({
         </NavLink>
         <NavLink to={`/app/families/${familyId}/tree`}>Tree</NavLink>
         <NavLink to={`/app/families/${familyId}/feed`}>Feed</NavLink>
+        <NavLink to={`/app/families/${familyId}/directory`}>Who's who</NavLink>
+        <NavLink to={`/app/families/${familyId}/help`}>Help board</NavLink>
       </nav>
     </>
   );

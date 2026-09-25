@@ -284,6 +284,14 @@ code {
 .mainnav {
   display: flex;
   gap: 4px;
+  /* Scrolls sideways on narrow phones instead of widening the page. */
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.mainnav a {
+  white-space: nowrap;
 }
 
 .mainnav a {
@@ -306,6 +314,7 @@ code {
 
 .topbar-user {
   margin-left: auto;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -627,6 +636,10 @@ a.list-item:hover {
 
   .topbar-user .avatar {
     display: none;
+  }
+
+  .mainnav a {
+    padding: 6px;
   }
 }
 
@@ -1502,4 +1515,88 @@ a.person-node:hover {
   .reaction:hover {
     transform: none;
   }
+}
+
+/* ---------- Kinship, circles and the help board ---------- */
+
+.badge-close {
+  background: var(--bn-pen-wash);
+  color: var(--bn-pen);
+}
+
+.badge-self {
+  background: var(--bn-pen);
+  color: var(--bn-surface);
+}
+
+.badge-request {
+  background: var(--bn-highlight);
+  color: var(--bn-ink);
+}
+
+.badge-offer {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.list-item-title .badge {
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.person-node-kin {
+  font-size: 0.75rem;
+  color: var(--bn-pen);
+  font-weight: 550;
+}
+
+/* The red pen circles you in the tree, as in the brand sketch. */
+.person-node-self {
+  box-shadow: 0 0 0 2px var(--bn-pen);
+}
+
+.member-item {
+  flex-wrap: wrap;
+}
+
+/* Full-width row under the member, aligned with their name (small avatar + gap). */
+.member-link {
+  flex-basis: 100%;
+  padding-left: 40px;
+}
+
+.member-link .select {
+  width: 100%;
+}
+
+.composer-audience {
+  margin-right: auto;
+}
+
+.help-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.help-item-done {
+  opacity: 0.75;
+}
+
+.help-replies {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.help-replies .comment {
+  display: flex;
+  gap: 10px;
+}
+
+.prose-list {
+  margin: 0;
+  padding-left: 1.1em;
+  display: grid;
+  gap: 6px;
+  color: var(--text-muted);
 }

@@ -53,6 +53,8 @@ Role: Creator/Editor/Viewer.
 
 Role: Creator.
 
+Body fields are all optional: `name`, `description`, and `closeFamilyDegree` (integer 1–6, the kinship degree up to which relatives count as close family).
+
 ### API-FAMILY-05 — Delete family
 
 `DELETE /families/{familyId}`
@@ -106,6 +108,18 @@ Creator transfer uses a dedicated operation.
 
 Role: Creator.
 
+### API-MEMBER-05 — Link a member to their person
+
+`PUT /families/{familyId}/members/{membershipId}/person`
+
+Role: Creator.
+
+```json
+{ "personId": "..." }
+```
+
+`personId: null` removes the link. `409 PERSON_NOT_IN_FAMILY` when the person is not a live person of this family; `409 CONFLICT` when another member is already linked to that person. Audited as `MEMBERSHIP_PERSON_LINKED`.
+
 ### API-MEMBER-04
 
 `POST /families/{familyId}/transfer-ownership`
@@ -128,13 +142,24 @@ Body:
 
 Role: Creator/Editor.
 
+### Person representation
+
+Every endpoint that returns people (person, people list, tree, export) serializes them for the requesting member (RULE-PRIVACY-03):
+
+- fields in groups hidden from the viewer are `null`, and their names are listed in `hiddenFields`
+- `birthYear` is always present when a birth date exists
+- `kinship`: `{ label, degree, byMarriage, circle }` relative to the viewer, where `circle` is `SELF`, `CLOSE`, `FAR` or `UNKNOWN`
+- `fieldVisibility`: the effective level per group (`work`, `biography`, `birthday`, `contact`, `address`, `body`), sent only to maintainers and to the account linked to that person
+
+Person bodies accept `education`, `city` and `skills` in addition to the v1 fields, plus `fieldVisibility` (a partial map of group to `FAMILY` | `CLOSE` | `MAINTAINERS`; overrides merge).
+
 ### API-PERSON-02
 
-`GET /families/{familyId}/people`
+`GET /families/{familyId}/people?search=...`
 
 Role: any family member.
 
-Supports search/pagination.
+Each person also carries `member` (`{ accountId, displayName }` of the linked account, or `null`). `search` matches name, occupation, education, city and skills, but only values visible to the requester.
 
 ### API-PERSON-03
 
@@ -146,7 +171,7 @@ Role: any family member.
 
 `PATCH /families/{familyId}/people/{personId}`
 
-Role: Creator/Editor.
+Role: Creator/Editor, or the account linked to this person for the self-service fields only (occupation, education, city, skills, email, phone, address, biography, fieldVisibility). Other fields from a self-service caller return `403`. A `fieldVisibility` change is audited as `PERSON_PRIVACY_UPDATED`.
 
 ### API-PERSON-05
 
@@ -221,6 +246,12 @@ Export includes only data visible to the requesting account.
 
 Role: any family member.
 
+```json
+{ "body": "...", "audience": "FAMILY" }
+```
+
+`audience` is `FAMILY` (default) or `CLOSE`. `CLOSE` requires the author to be linked to a person (`400 VALIDATION` otherwise). A `CLOSE` post, its comments and reactions answer `404` to members outside the author's close family (RULE-CIRCLE-04). `PATCH` accepts the same body.
+
 ### API-POST-02
 
 `GET /families/{familyId}/posts?cursor=...&limit=...`
@@ -288,6 +319,82 @@ Returns birthdays and memorial anniversaries from every family the account belon
 within the next `days` days (1-365, default 45), sorted by `daysUntil`. Each event includes
 `familyId`, `familyName`, `personId`, `personName`, `type` (`birthday` or `memorial`),
 `date`, `daysUntil`, and `age` (turning age or years since passing, when known).
+
+## Help board
+
+### API-HELP-01
+
+`GET /families/{familyId}/help?status=OPEN|RESOLVED|CLOSED&kind=REQUEST|OFFER`
+
+Role: any family member. Returns `items`, newest first, each with `author` (`id`, `displayName`, `personId`, `kinship` label relative to the requester) and `responses`. Close-family items outside the requester's circle are omitted.
+
+### API-HELP-02
+
+`POST /families/{familyId}/help`
+
+Role: any family member.
+
+```json
+{
+  "kind": "REQUEST",
+  "category": "ADVICE | CAREER | EDUCATION | HEALTH | HOUSING | TRAVEL | CARE | OTHER",
+  "title": "...",
+  "body": "...",
+  "audience": "FAMILY"
+}
+```
+
+### API-HELP-03
+
+`PATCH /families/{familyId}/help/{helpId}`
+
+Role: author. Optional `title`, `body`, `category`, `status` (`OPEN`, `RESOLVED`, `CLOSED`).
+
+### API-HELP-04
+
+`DELETE /families/{familyId}/help/{helpId}`
+
+Role: author or Creator. Soft delete, audited as `HELP_REQUEST_DELETED`.
+
+### API-HELP-05
+
+`POST /families/{familyId}/help/{helpId}/responses` with `{ "body": "..." }`
+
+Role: any member who can see the item. `409 CONFLICT` once the item is not open.
+
+`DELETE /families/{familyId}/help/{helpId}/responses/{responseId}`: reply author or Creator.
+
+## DNA matches (beta)
+
+### API-DNA-01
+
+`GET /dna/matches`
+
+Returns the requester's matches: `otherAccount`, `direction` (`OUTGOING` or `INCOMING`), `status` (`PENDING` or `CONFIRMED`), `provider`, `sharedCm`, `sharedSegments`, `note`, and `estimate` (`likely` relationships and a `confidence`).
+
+### API-DNA-02
+
+`POST /dna/matches`
+
+```json
+{
+  "accountId": "...",
+  "provider": "ANCESTRY | TWENTY_THREE_AND_ME | MYHERITAGE | FTDNA | GEDMATCH | OTHER",
+  "sharedCm": 870,
+  "sharedSegments": 31,
+  "note": "..."
+}
+```
+
+`sharedCm` is 0–7,500. `400` for a self-match, `404` for an unknown account, `409` when the pair already has a match.
+
+### API-DNA-03
+
+`POST /dna/matches/{matchId}/confirm`: the non-reporting account only (`403` for the reporter, `404` for anyone else).
+
+### API-DNA-04
+
+`DELETE /dna/matches/{matchId}`: either account. Deletes the row (decline, cancel or withdraw consent).
 
 ## Friends
 

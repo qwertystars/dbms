@@ -4,6 +4,8 @@ import { familyMemberships, parentChildRelationships, people } from "~/db/schema
 import { Errors } from "~/lib/errors";
 import type { Account } from "~/lib/context";
 import { audit } from "~/modules/audit/service";
+import { loadViewerContext } from "~/modules/kinship/service";
+import { presentPerson, type PresentedPerson } from "~/modules/people/visibility";
 
 export interface ExportOptions {
   format: "json" | "csv";
@@ -18,6 +20,7 @@ export async function exportFamilyData(account: Account, familyId: string, optio
     ),
   });
   if (!membership) throw Errors.FORBIDDEN();
+  const ctx = await loadViewerContext(account.id, familyId);
 
   await audit(db, {
     actorAccountId: account.id,
@@ -28,9 +31,12 @@ export async function exportFamilyData(account: Account, familyId: string, optio
     summary: { format: options.format },
   });
 
-  const familyPeople = await db.query.people.findMany({
-    where: and(eq(people.familyId, familyId), isNull(people.deletedAt)),
-  });
+  // Exports go through the same serializer as the API, so hidden fields stay hidden.
+  const familyPeople = (
+    await db.query.people.findMany({
+      where: and(eq(people.familyId, familyId), isNull(people.deletedAt)),
+    })
+  ).map((p) => presentPerson(p, ctx));
   // Only export relationships between people who have not been deleted.
   const livePersonIds = new Set(familyPeople.map((p) => p.id));
   const edges = (
@@ -67,7 +73,7 @@ export async function exportFamilyData(account: Account, familyId: string, optio
   };
 }
 
-function mapPerson(p: typeof people.$inferSelect) {
+function mapPerson(p: PresentedPerson) {
   return {
     id: p.id,
     name: p.name,
@@ -80,13 +86,16 @@ function mapPerson(p: typeof people.$inferSelect) {
     email: p.email,
     phone: p.phone,
     occupation: p.occupation,
+    education: p.education,
+    city: p.city,
+    skills: p.skills,
     biography: p.biography,
     profileMediaId: p.profileMediaId,
   };
 }
 
 function toCsv(
-  familyPeople: (typeof people.$inferSelect)[],
+  familyPeople: PresentedPerson[],
   edges: (typeof parentChildRelationships.$inferSelect)[],
 ) {
   const headers = [
@@ -101,6 +110,9 @@ function toCsv(
     "email",
     "phone",
     "occupation",
+    "education",
+    "city",
+    "skills",
     "biography",
   ];
   const peopleRows = familyPeople.map((p) =>

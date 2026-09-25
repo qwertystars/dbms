@@ -1,3 +1,4 @@
+import { AudienceBadge } from "~/client/components/kinship";
 import { useState, type SubmitEvent } from "react";
 import { api, errorMessage } from "~/client/api";
 import { Avatar, Icon, Loading, timeAgo, useBusy } from "~/client/components/ui";
@@ -21,6 +22,7 @@ export interface FeedPost {
   reactionCounts?: Record<string, number>;
   commentCount?: number;
   myReaction?: string | null;
+  audience?: "FAMILY" | "CLOSE";
 }
 
 export interface FeedComment {
@@ -161,6 +163,7 @@ export function PostCard({ familyId, post, me, role, onPatch, onRemove, onError 
                 {timeAgo(created)}
               </time>
               {edited && <span className="post-dot">· edited</span>}
+              <AudienceBadge audience={post.audience} />
             </div>
             {(canEdit || canDelete) && !editing && (
               <div className="post-actions">

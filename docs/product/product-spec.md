@@ -167,6 +167,47 @@ The system records security-relevant and family-structure mutations, including:
 - family deletion
 - invitation acceptance
 
+### CAP-CIRCLE-01 — Close and far family
+
+Each member account can be linked to the Person who represents them in the tree ("this is me"). Only the Creator links members, because the link decides who counts as close family.
+
+From the tree the product computes every person's relationship to the viewer (mother, first cousin once removed, sister-in-law, uncle by marriage) and a kinship degree (parent 1, sibling 2, aunt 3, first cousin 4). Two people who share a child are treated as partners.
+
+Relatives within the family's close-family degree (default 3; the Creator can choose 1 to 6) are **close family**. Everyone else in the family is **extended (far) family**. A viewer who is not linked sees everyone as extended family.
+
+### CAP-PRIVACY-01 — Field-group visibility
+
+Profile fields are grouped, and each group of each person has a visibility:
+
+| Group           | Fields                                       | Default                |
+| --------------- | -------------------------------------------- | ---------------------- |
+| Work & skills   | occupation, education, city, "can help with" | Everyone in the family |
+| Biography       | biography                                    | Everyone in the family |
+| Birthday        | full date of birth (the year always shows)   | Everyone in the family |
+| Contact         | email, phone                                 | Close family           |
+| Address         | address                                      | Close family           |
+| Height & weight | height, weight                               | Close family           |
+
+Levels: `FAMILY` (every member), `CLOSE` (close family), `MAINTAINERS` (only the person and the family's Creator and Editors). Name, gender, photo, life years and tree position are always visible to members. Hidden values are removed on the server before any response, export or search.
+
+The account linked to a person may edit that person's contact, work, biography and privacy fields itself, even as a Viewer.
+
+### CAP-DIRECTORY-01 — Who's who
+
+A family directory lists everyone grouped into You, Close family, Extended family and Not connected, with their relationship to the viewer, occupation, education, city and what they can help with. Search matches only the fields the viewer can see.
+
+### CAP-SOCIAL-03 — Close-family sharing
+
+Posts and help-board items may be shared with the whole family or with close family only. Close-family content is visible to its author and to members within the close-family degree of the author. It is indistinguishable from missing content to everyone else, including the Creator.
+
+### CAP-HELP-01 — Help board
+
+Members ask for help (requests) or offer it (offers) in a category (advice, career, studies, health, housing, travel, care, other), and other members reply. The author marks an item sorted, closes or reopens it. The Creator may remove items and replies.
+
+### CAP-DNA-01 — DNA matches (beta)
+
+An account records a DNA match with another account by copying the summary a testing service shows (provider, shared centimorgans, optionally segments and a note). The other account must confirm it. Both see an estimated relationship from typical shared-cM ranges. Raw genetic data is never collected. Either side can delete the match, which erases it. A DNA match never grants family access.
+
 ## Explicit non-goals for v1
 
 - public family trees
@@ -177,7 +218,7 @@ The system records security-relevant and family-structure mutations, including:
 - stories/reels
 - ads
 - monetization
-- genealogy DNA integrations
+- direct integrations with DNA testing services or uploads of raw DNA files (only consented match summaries, CAP-DNA-01)
 - importing external genealogy formats
 - automatic person matching
 - AI-generated ancestry claims
@@ -188,7 +229,9 @@ Family spaces are private by default.
 
 An account may read family data only when it has an active membership in that family or when a narrowly scoped invitation-acceptance flow requires minimal metadata.
 
-Friendship is not authorization.
+Friendship is not authorization. Neither is a DNA match.
+
+Inside a family, far family see less than close family (CAP-CIRCLE-01, CAP-PRIVACY-01). Creators and Editors see every field because they maintain the tree.
 
 ## Data retention baseline
 

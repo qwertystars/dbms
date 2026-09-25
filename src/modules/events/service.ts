@@ -2,6 +2,8 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "~/lib/db";
 import { families, familyMemberships, people } from "~/db/schema";
 import type { Account } from "~/lib/context";
+import { loadViewerContext, type ViewerContext } from "~/modules/kinship/service";
+import { canSeeGroup, effectiveVisibility } from "~/modules/people/visibility";
 
 export interface UpcomingEvent {
   familyId: string;
@@ -67,6 +69,7 @@ export async function listUpcomingEvents(
       name: people.name,
       dateOfBirth: people.dateOfBirth,
       dateOfDeath: people.dateOfDeath,
+      fieldVisibility: people.fieldVisibility,
     })
     .from(people)
     .where(
@@ -79,16 +82,27 @@ export async function listUpcomingEvents(
       ),
     );
 
+  // Birthdays follow the birthday field's visibility for this viewer.
+  const contexts = new Map<string, ViewerContext>();
+  for (const m of memberships)
+    contexts.set(m.familyId, await loadViewerContext(account.id, m.familyId));
+
   const today = startOfUtcDay(now);
   const events: UpcomingEvent[] = [];
   for (const person of rows) {
+    const ctx = contexts.get(person.familyId)!;
+    const birthdayVisible = canSeeGroup(
+      ctx,
+      person.id,
+      effectiveVisibility(person.fieldVisibility).birthday,
+    );
     const source = person.dateOfDeath
       ? {
           type: "memorial" as const,
           date: person.dateOfDeath,
           originYear: Number(person.dateOfDeath.slice(0, 4)),
         }
-      : person.dateOfBirth
+      : person.dateOfBirth && birthdayVisible
         ? {
             type: "birthday" as const,
             date: person.dateOfBirth,

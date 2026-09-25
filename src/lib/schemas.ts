@@ -15,7 +15,23 @@ export const familyCreateSchema = z.object({
 export const familyUpdateSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   description: z.string().max(1000).optional().nullable(),
+  /** Kinship degree up to which relatives count as close family. */
+  closeFamilyDegree: z.number().int().min(1).max(6).optional(),
 });
+
+export const audienceSchema = z.enum(["FAMILY", "CLOSE"]);
+export const visibilityLevelSchema = z.enum(["FAMILY", "CLOSE", "MAINTAINERS"]);
+export const fieldVisibilitySchema = z
+  .object({
+    work: visibilityLevelSchema,
+    biography: visibilityLevelSchema,
+    birthday: visibilityLevelSchema,
+    contact: visibilityLevelSchema,
+    address: visibilityLevelSchema,
+    body: visibilityLevelSchema,
+  })
+  .partial()
+  .strict();
 
 export const personCreateSchema = z.object({
   name: z.string().min(1).max(255),
@@ -28,8 +44,12 @@ export const personCreateSchema = z.object({
   email: z.string().email().max(255).optional().nullable(),
   phone: z.string().max(50).optional().nullable(),
   occupation: z.string().max(255).optional().nullable(),
+  education: z.string().max(255).optional().nullable(),
+  city: z.string().max(255).optional().nullable(),
+  skills: z.string().max(1000).optional().nullable(),
   biography: z.string().max(5000).optional().nullable(),
   profileMediaId: uuidSchema.optional().nullable(),
+  fieldVisibility: fieldVisibilitySchema.optional().nullable(),
 });
 
 export const personUpdateSchema = personCreateSchema.partial();
@@ -48,16 +68,71 @@ export const membershipUpdateSchema = z.object({
   role: z.enum(["EDITOR", "VIEWER"]),
 });
 
+export const membershipPersonSchema = z.object({
+  personId: uuidSchema.nullable(),
+});
+
 export const ownershipTransferSchema = z.object({
   newCreatorMembershipId: uuidSchema,
 });
 
 export const postCreateSchema = z.object({
   body: z.string().min(1).max(5000),
+  audience: audienceSchema.optional(),
 });
 
-export const postUpdateSchema = z.object({
-  body: z.string().min(1).max(5000),
+export const postUpdateSchema = postCreateSchema;
+
+export const helpKindSchema = z.enum(["REQUEST", "OFFER"]);
+export const helpCategorySchema = z.enum([
+  "ADVICE",
+  "CAREER",
+  "EDUCATION",
+  "HEALTH",
+  "HOUSING",
+  "TRAVEL",
+  "CARE",
+  "OTHER",
+]);
+export const helpStatusSchema = z.enum(["OPEN", "RESOLVED", "CLOSED"]);
+
+export const helpCreateSchema = z.object({
+  kind: helpKindSchema,
+  category: helpCategorySchema,
+  title: z.string().trim().min(1).max(200),
+  body: z.string().max(5000).optional().nullable(),
+  audience: audienceSchema.optional(),
+});
+
+export const helpUpdateSchema = z
+  .object({
+    title: z.string().trim().min(1).max(200),
+    body: z.string().max(5000).nullable(),
+    category: helpCategorySchema,
+    status: helpStatusSchema,
+  })
+  .partial();
+
+export const helpResponseSchema = z.object({
+  body: z.string().trim().min(1).max(2000),
+});
+
+export const dnaProviderSchema = z.enum([
+  "ANCESTRY",
+  "TWENTY_THREE_AND_ME",
+  "MYHERITAGE",
+  "FTDNA",
+  "GEDMATCH",
+  "OTHER",
+]);
+
+export const dnaMatchCreateSchema = z.object({
+  accountId: uuidSchema,
+  provider: dnaProviderSchema,
+  // A human genome is roughly 7,000 cM, so anything above that is a typo.
+  sharedCm: z.number().min(0).max(7500),
+  sharedSegments: z.number().int().min(0).max(1000).optional().nullable(),
+  note: z.string().max(500).optional().nullable(),
 });
 
 export const commentCreateSchema = z.object({

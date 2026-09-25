@@ -1,7 +1,8 @@
-import { and, eq, isNull, or, sql } from "drizzle-orm";
+import { and, eq, isNull, or } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "~/lib/db";
 import {
+  accounts,
   auditEvents,
   familyMemberships,
   mediaAssets,
@@ -11,6 +12,8 @@ import {
 import { Errors } from "~/lib/errors";
 import type { Account } from "~/lib/context";
 import { auditValues } from "~/modules/audit/service";
+import { loadViewerContext, type ViewerContext } from "~/modules/kinship/service";
+import { isSelf, presentPerson } from "~/modules/people/visibility";
 
 export interface PersonInput {
   name: string;
@@ -23,9 +26,29 @@ export interface PersonInput {
   email?: string | null;
   phone?: string | null;
   occupation?: string | null;
+  education?: string | null;
+  city?: string | null;
+  skills?: string | null;
   biography?: string | null;
   profileMediaId?: string | null;
+  fieldVisibility?: Record<string, string> | null;
 }
+
+/**
+ * Fields the account linked to a person may change on its own profile even
+ * without an Editor role: how to reach them, what they do, and who sees it.
+ */
+export const selfServiceFields = [
+  "occupation",
+  "education",
+  "city",
+  "skills",
+  "email",
+  "phone",
+  "address",
+  "biography",
+  "fieldVisibility",
+] as const;
 
 function toDb(input: PersonInput) {
   return {
@@ -39,8 +62,12 @@ function toDb(input: PersonInput) {
     email: input.email ?? null,
     phone: input.phone ?? null,
     occupation: input.occupation ?? null,
+    education: input.education ?? null,
+    city: input.city ?? null,
+    skills: input.skills ?? null,
     biography: input.biography ?? null,
     profileMediaId: input.profileMediaId ?? null,
+    fieldVisibility: input.fieldVisibility ?? null,
   };
 }
 
@@ -71,15 +98,52 @@ export async function createPerson(account: Account, familyId: string, input: Pe
       }),
     ),
   ]);
-  return person;
+  return presentPerson(person, await loadViewerContext(account.id, familyId));
 }
 
-export async function listPeople(familyId: string, search?: string, limit = 100, offset = 0) {
-  const base = and(eq(people.familyId, familyId), isNull(people.deletedAt));
-  const condition = search
-    ? and(base, sql`LOWER(${people.name}) LIKE LOWER(${"%" + search + "%"})`)
-    : base;
-  return await db.select().from(people).where(condition).limit(limit).offset(offset);
+/**
+ * People in a family as one viewer may see them, with kinship to the viewer
+ * and the member account linked to each person. `search` matches the name and
+ * only the work fields this viewer can see, so a search cannot reveal hidden values.
+ */
+export async function listPeopleFor(account: Account, familyId: string, search?: string) {
+  const ctx = await loadViewerContext(account.id, familyId);
+  const [rows, links] = await Promise.all([
+    db
+      .select()
+      .from(people)
+      .where(and(eq(people.familyId, familyId), isNull(people.deletedAt)))
+      .orderBy(people.name),
+    db
+      .select({
+        personId: familyMemberships.personId,
+        accountId: accounts.id,
+        displayName: accounts.displayName,
+      })
+      .from(familyMemberships)
+      .innerJoin(accounts, eq(familyMemberships.accountId, accounts.id))
+      .where(and(eq(familyMemberships.familyId, familyId), isNull(familyMemberships.removedAt))),
+  ]);
+  const linked = new Map(
+    links
+      .filter((l) => l.personId)
+      .map((l) => [l.personId!, { accountId: l.accountId, displayName: l.displayName }]),
+  );
+  const needle = search?.trim().toLowerCase();
+  return rows
+    .map((row) => ({ ...presentPerson(row, ctx), member: linked.get(row.id) ?? null }))
+    .filter(
+      (p) =>
+        !needle ||
+        [p.name, p.occupation, p.education, p.city, p.skills].some((value) =>
+          value?.toLowerCase().includes(needle),
+        ),
+    );
+}
+
+export async function getPersonFor(account: Account, familyId: string, personId: string) {
+  const ctx = await loadViewerContext(account.id, familyId);
+  return presentPerson(await getPerson(familyId, personId), ctx);
 }
 
 export async function getPerson(familyId: string, personId: string) {
@@ -96,8 +160,9 @@ export async function updatePerson(
   personId: string,
   input: Partial<PersonInput>,
 ) {
-  await requireEditor(account, familyId);
+  const ctx = await loadViewerContext(account.id, familyId);
   const person = await getPerson(familyId, personId);
+  assertCanUpdate(ctx, personId, input);
   await assertPersonMediaInFamily(input.profileMediaId, familyId, account.id);
 
   const values: Record<string, unknown> = {};
@@ -111,8 +176,17 @@ export async function updatePerson(
   if (input.email !== undefined) values.email = input.email ?? null;
   if (input.phone !== undefined) values.phone = input.phone ?? null;
   if (input.occupation !== undefined) values.occupation = input.occupation ?? null;
+  if (input.education !== undefined) values.education = input.education ?? null;
+  if (input.city !== undefined) values.city = input.city ?? null;
+  if (input.skills !== undefined) values.skills = input.skills ?? null;
   if (input.biography !== undefined) values.biography = input.biography ?? null;
   if (input.profileMediaId !== undefined) values.profileMediaId = input.profileMediaId ?? null;
+  if (input.fieldVisibility !== undefined) {
+    // Overrides merge, so a client can change one group without restating the rest.
+    values.fieldVisibility = input.fieldVisibility
+      ? { ...(person.fieldVisibility ?? {}), ...input.fieldVisibility }
+      : null;
+  }
   const now = new Date();
   values.updatedAt = now;
 
@@ -125,14 +199,31 @@ export async function updatePerson(
       auditValues({
         actorAccountId: account.id,
         familyId,
-        action: "PERSON_UPDATED",
+        action: input.fieldVisibility !== undefined ? "PERSON_PRIVACY_UPDATED" : "PERSON_UPDATED",
         targetType: "Person",
         targetId: personId,
-        summary: { name: input.name ?? person.name, fields: Object.keys(input) },
+        summary: {
+          name: input.name ?? person.name,
+          fields: Object.keys(input),
+          selfService: !ctx.isMaintainer,
+        },
       }),
     ),
   ]);
-  return await getPerson(familyId, personId);
+  return presentPerson(await getPerson(familyId, personId), ctx);
+}
+
+function assertCanUpdate(ctx: ViewerContext, personId: string, input: Partial<PersonInput>) {
+  if (ctx.isMaintainer) return;
+  if (!isSelf(ctx, personId)) throw Errors.FORBIDDEN();
+  const disallowed = Object.keys(input).filter(
+    (key) => !(selfServiceFields as readonly string[]).includes(key),
+  );
+  if (disallowed.length > 0) {
+    throw Errors.FORBIDDEN(
+      `Only an Editor can change ${disallowed.join(", ")}. You can update your own contact, work, biography and privacy.`,
+    );
+  }
 }
 
 export async function deletePerson(account: Account, familyId: string, personId: string) {

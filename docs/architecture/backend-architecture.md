@@ -74,6 +74,37 @@ Owns:
 
 - parent_child_relationships
 
+### Kinship
+
+Responsibilities:
+
+- compute relationships and kinship degree from parent/child edges (`kinship.ts`, pure)
+- build the per-request viewer context: role, linked person, close-family degree, relatives
+- answer close/far questions for privacy and close-family content
+
+Owns no tables; reads families, memberships, people and edges. See ADR-005.
+
+### Help
+
+Responsibilities:
+
+- family help board: requests, offers, replies, status
+
+Owns:
+
+- help_requests
+- help_responses
+
+### DNA (beta)
+
+Responsibilities:
+
+- consented account-to-account DNA match summaries and relationship estimates
+
+Owns:
+
+- dna_matches
+
 ### Social
 
 Responsibilities:
@@ -288,6 +319,9 @@ src/
     media/
     events/
     audit/
+    kinship/
+    help/
+    dna/
   shared/
     errors/
     validation/

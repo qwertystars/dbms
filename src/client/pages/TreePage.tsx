@@ -10,6 +10,7 @@ import {
   ErrorState,
   Field,
   Loading,
+  capitalize,
   lifeSpan,
   useBusy,
 } from "~/client/components/ui";
@@ -160,7 +161,9 @@ export function TreePage() {
       <Link
         key={p.id}
         to={personLink(p.id)}
-        className={`person-node${p.dateOfDeath ? " deceased" : ""}`}
+        className={`person-node${p.dateOfDeath ? " deceased" : ""}${
+          p.kinship?.circle === "SELF" ? " person-node-self" : ""
+        }`}
       >
         <Avatar
           name={p.name}
@@ -170,6 +173,11 @@ export function TreePage() {
         />
         <div style={{ minWidth: 0 }}>
           <div className="person-node-name">{p.name}</div>
+          {p.kinship?.label && (
+            <div className="person-node-kin">
+              {p.kinship.circle === "SELF" ? "You" : capitalize(p.kinship.label)}
+            </div>
+          )}
           {span && <div className="person-node-meta">{span}</div>}
           {parents.length > 0 && (
             <div className="person-node-meta">Child of {parents.join(" & ")}</div>

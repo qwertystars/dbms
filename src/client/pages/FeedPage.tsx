@@ -9,6 +9,7 @@ import { Alert, Avatar, EmptyState, ErrorState, Loading, useBusy } from "~/clien
 interface FeedData {
   family: any;
   role: string;
+  linked: boolean;
   posts: FeedPost[];
   nextCursor?: string;
 }
@@ -31,6 +32,7 @@ export function FeedPage() {
     setData({
       family: family.body.family,
       role: family.body.membership.role,
+      linked: Boolean(family.body.membership.personId),
       posts: feed.body.posts || [],
       nextCursor: feed.body.nextCursor,
     });
@@ -46,9 +48,13 @@ export function FeedPage() {
   async function createPost(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     const formEl = e.currentTarget;
-    const body = ((new FormData(formEl).get("body") as string) || "").trim();
+    const form = new FormData(formEl);
+    const body = ((form.get("body") as string) || "").trim();
     if (!body) return;
-    const res = await runPost(() => api("POST", `/api/v1/families/${familyId}/posts`, { body }));
+    const audience = (form.get("audience") as string) || "FAMILY";
+    const res = await runPost(() =>
+      api("POST", `/api/v1/families/${familyId}/posts`, { body, audience }),
+    );
     if (!res || res.status !== 201) {
       setError(res ? errorMessage(res, "Could not publish post.") : null);
       return;
@@ -105,7 +111,7 @@ export function FeedPage() {
         family={data.family}
         role={data.role}
         title="Feed"
-        description="Updates shared with everyone in this family."
+        description="Updates shared with this family. Close-family posts stay within your close circle."
       />
 
       <div className="feed">
@@ -126,7 +132,24 @@ export function FeedPage() {
             </label>
           </div>
           <div className="composer-footer">
-            <span className="subtle">Photos, milestones and everyday moments all belong here.</span>
+            <label className="composer-audience">
+              <span className="visually-hidden">Who can see this</span>
+              <select
+                className="select select-sm"
+                name="audience"
+                defaultValue="FAMILY"
+                title={
+                  data.linked
+                    ? undefined
+                    : "Close-family posts need your account linked to your person in the tree."
+                }
+              >
+                <option value="FAMILY">Everyone in the family</option>
+                <option value="CLOSE" disabled={!data.linked}>
+                  Close family only
+                </option>
+              </select>
+            </label>
             <button type="submit" className="btn btn-primary" disabled={posting}>
               {posting ? "Posting…" : "Share"}
             </button>

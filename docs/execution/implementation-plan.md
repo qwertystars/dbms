@@ -190,7 +190,7 @@ Do not add these unless requirements change:
 - DMs
 - public feed
 - spouse relationship type
-- per-field privacy
+- per-field privacy beyond the field groups of CAP-PRIVACY-01
 - visual PDF export
 - external genealogy import
 - AI features

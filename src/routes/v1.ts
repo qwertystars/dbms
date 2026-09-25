@@ -10,6 +10,13 @@ import {
   parentChildEdgeSchema,
   invitationCreateSchema,
   membershipUpdateSchema,
+  membershipPersonSchema,
+  helpCreateSchema,
+  helpUpdateSchema,
+  helpResponseSchema,
+  helpKindSchema,
+  helpStatusSchema,
+  dnaMatchCreateSchema,
   ownershipTransferSchema,
   postCreateSchema,
   postUpdateSchema,
@@ -31,6 +38,10 @@ import * as friendsService from "~/modules/friends/service";
 import * as mediaService from "~/modules/media/service";
 import * as exportService from "~/modules/export/service";
 import * as eventsService from "~/modules/events/service";
+import * as helpService from "~/modules/help/service";
+import * as dnaService from "~/modules/dna/service";
+import { loadViewerContext } from "~/modules/kinship/service";
+import { presentPerson } from "~/modules/people/visibility";
 import type { Account } from "~/lib/context";
 import { getFamily } from "~/modules/families/service";
 
@@ -45,6 +56,7 @@ const personIdParam = z.object({ familyId: uuidSchema, personId: uuidSchema });
 const postIdParam = z.object({ familyId: uuidSchema, postId: uuidSchema });
 const commentIdParam = z.object({ familyId: uuidSchema, commentId: uuidSchema });
 const relationshipIdParam = z.object({ familyId: uuidSchema, relationshipId: uuidSchema });
+const helpIdParam = z.object({ familyId: uuidSchema, helpId: uuidSchema });
 
 // Accounts
 function serializeMe(account: Account) {
@@ -155,6 +167,24 @@ app.patch(
   },
 );
 
+app.put(
+  "/families/:familyId/members/:membershipId/person",
+  zValidator("param", z.object({ familyId: uuidSchema, membershipId: uuidSchema })),
+  zValidator("json", membershipPersonSchema),
+  async (c) => {
+    const account = requireAccount(c);
+    const { familyId, membershipId } = c.req.valid("param");
+    const { personId } = c.req.valid("json");
+    const membership = await familyService.linkMemberPerson(
+      account,
+      familyId,
+      membershipId,
+      personId,
+    );
+    return c.json({ membership });
+  },
+);
+
 app.delete(
   "/families/:familyId/members/:membershipId",
   zValidator("param", z.object({ familyId: uuidSchema, membershipId: uuidSchema })),
@@ -221,19 +251,15 @@ app.post(
 app.get("/families/:familyId/people", zValidator("param", familyIdParam), async (c) => {
   const account = requireAccount(c);
   const { familyId } = c.req.valid("param");
-  const membership = await familyService.getMembership(familyId, account.id);
-  if (!membership) throw Errors.FORBIDDEN();
   const search = c.req.query("search");
-  const people = await peopleService.listPeople(familyId, search);
+  const people = await peopleService.listPeopleFor(account, familyId, search);
   return c.json({ people });
 });
 
 app.get("/families/:familyId/people/:personId", zValidator("param", personIdParam), async (c) => {
   const account = requireAccount(c);
   const { familyId, personId } = c.req.valid("param");
-  const membership = await familyService.getMembership(familyId, account.id);
-  if (!membership) throw Errors.FORBIDDEN();
-  const person = await peopleService.getPerson(familyId, personId);
+  const person = await peopleService.getPersonFor(account, familyId, personId);
   return c.json({ person });
 });
 
@@ -275,11 +301,10 @@ app.get(
   async (c) => {
     const account = requireAccount(c);
     const { familyId } = c.req.valid("param");
-    const membership = await familyService.getMembership(familyId, account.id);
-    if (!membership) throw Errors.FORBIDDEN();
+    const ctx = await loadViewerContext(account.id, familyId);
     const { rootPersonId, direction, depth } = c.req.valid("query");
     const tree = await treeService.getTree(familyId, rootPersonId, direction, depth);
-    return c.json(tree);
+    return c.json({ ...tree, people: tree.people.map((p) => presentPerson(p, ctx)) });
   },
 );
 
@@ -434,6 +459,115 @@ app.delete(
     const { familyId, postId } = c.req.valid("param");
     await socialService.removeReaction(account, familyId, postId);
     return c.json({ removed: true });
+  },
+);
+
+// Help board
+app.get(
+  "/families/:familyId/help",
+  zValidator("param", familyIdParam),
+  zValidator(
+    "query",
+    z.object({ status: helpStatusSchema.optional(), kind: helpKindSchema.optional() }),
+  ),
+  async (c) => {
+    const account = requireAccount(c);
+    const { familyId } = c.req.valid("param");
+    const items = await helpService.listHelpRequests(account, familyId, c.req.valid("query"));
+    return c.json({ items });
+  },
+);
+
+app.post(
+  "/families/:familyId/help",
+  zValidator("param", familyIdParam),
+  zValidator("json", helpCreateSchema),
+  async (c) => {
+    const account = requireAccount(c);
+    const { familyId } = c.req.valid("param");
+    const item = await helpService.createHelpRequest(account, familyId, c.req.valid("json"));
+    return c.json({ item }, 201);
+  },
+);
+
+app.patch(
+  "/families/:familyId/help/:helpId",
+  zValidator("param", helpIdParam),
+  zValidator("json", helpUpdateSchema),
+  async (c) => {
+    const account = requireAccount(c);
+    const { familyId, helpId } = c.req.valid("param");
+    const item = await helpService.updateHelpRequest(
+      account,
+      familyId,
+      helpId,
+      c.req.valid("json"),
+    );
+    return c.json({ item });
+  },
+);
+
+app.delete("/families/:familyId/help/:helpId", zValidator("param", helpIdParam), async (c) => {
+  const account = requireAccount(c);
+  const { familyId, helpId } = c.req.valid("param");
+  return c.json(await helpService.deleteHelpRequest(account, familyId, helpId));
+});
+
+app.post(
+  "/families/:familyId/help/:helpId/responses",
+  zValidator("param", helpIdParam),
+  zValidator("json", helpResponseSchema),
+  async (c) => {
+    const account = requireAccount(c);
+    const { familyId, helpId } = c.req.valid("param");
+    const response = await helpService.respondToHelpRequest(
+      account,
+      familyId,
+      helpId,
+      c.req.valid("json").body,
+    );
+    return c.json({ response }, 201);
+  },
+);
+
+app.delete(
+  "/families/:familyId/help/:helpId/responses/:responseId",
+  zValidator("param", helpIdParam.extend({ responseId: uuidSchema })),
+  async (c) => {
+    const account = requireAccount(c);
+    const { familyId, helpId, responseId } = c.req.valid("param");
+    return c.json(await helpService.deleteHelpResponse(account, familyId, helpId, responseId));
+  },
+);
+
+// DNA matches (beta)
+app.get("/dna/matches", async (c) => {
+  const account = requireAccount(c);
+  const matches = await dnaService.listMatches(account);
+  return c.json({ matches });
+});
+
+app.post("/dna/matches", zValidator("json", dnaMatchCreateSchema), async (c) => {
+  const account = requireAccount(c);
+  const match = await dnaService.reportMatch(account, c.req.valid("json"));
+  return c.json({ match }, 201);
+});
+
+app.post(
+  "/dna/matches/:matchId/confirm",
+  zValidator("param", z.object({ matchId: uuidSchema })),
+  async (c) => {
+    const account = requireAccount(c);
+    return c.json(await dnaService.confirmMatch(account, c.req.valid("param").matchId));
+  },
+);
+
+app.delete(
+  "/dna/matches/:matchId",
+  zValidator("param", z.object({ matchId: uuidSchema })),
+  async (c) => {
+    const account = requireAccount(c);
+    return c.json(await dnaService.deleteMatch(account, c.req.valid("param").matchId));
   },
 );
 

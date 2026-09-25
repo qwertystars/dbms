@@ -2,7 +2,7 @@
 
 ## Project status
 
-**Implementation complete (v1.0), plus post-v1.0 hardening and an engagement slice.**
+**Implementation complete (v1.0), plus post-v1.0 hardening, an engagement slice, and a family-circles slice (close/far family privacy, kinship, who's who, help board, DNA matches beta).**
 
 All planned backend services, web UI, database migrations, CI, and hardening are in place and verified. Recent work closed the D1 transaction gap, added a production guard for the development sign-in, made family writes D1-compatible, expanded auditing, and upgraded the feed with reactions, comments, and birthday/remembrance reminders.
 
@@ -56,12 +56,34 @@ The frontend is a Vite + React single-page application and the backend is a stan
 
 `docs/product/banyan-spec.md` (Banyan brand kit and implementation spec, v0.1, 2026-09-23) was added as a newer product input. Apart from the branding slice above, none of it is implemented. It differs from the current implementation in storage (Postgres versus D1), web stack (Next.js, Tailwind, shadcn versus Vite and plain CSS), data model (unions and child links, placeholders, fuzzy dates, field visibility versus direct parent-child edges) and the permission matrix (for example, editors may invite viewers and only creators export JSON). These conflicts are not resolved yet; the older normative docs still describe the implemented behaviour.
 
+## Family circles slice (2026-09-25)
+
+Added in response to the request for "Facebook for families, close and far, with limited data for far family and optional DNA connections". See CAP-CIRCLE-01, CAP-PRIVACY-01, CAP-DIRECTORY-01, CAP-SOCIAL-03, CAP-HELP-01 and CAP-DNA-01 in the product spec, and ADR-005.
+
+- Migration `0001_rich_roland_deschain.sql`: `families.close_family_degree`, `people.education/city/skills/field_visibility`, `posts.audience`, and the tables `help_requests`, `help_responses`, `dna_matches`.
+- Member linking: `PUT /families/:id/members/:membershipId/person` (Creator only, audited `MEMBERSHIP_PERSON_LINKED`, one person per member). The Overview's Members card has a "In the tree as…" picker for the Creator.
+- Kinship engine (`src/modules/kinship/kinship.ts`): English relationship labels (parents to Nx great-grandparents, siblings, aunts/uncles, nieces/nephews, cousins with removal, partners, in-laws, step relations, "by marriage") and a symmetric kinship degree. `ViewerContext` in `src/modules/kinship/service.ts` decides SELF / CLOSE / FAR / UNKNOWN per person.
+- Field-group privacy (`src/modules/people/visibility.ts`): work, biography, birthday, contact, address, body, with levels FAMILY / CLOSE / MAINTAINERS and the defaults from the spec. Applied to person reads, the people list and its search, the tree, JSON/CSV export and birthday reminders. Creators and Editors see every field.
+- Self-service: the account linked to a person can edit that person's contact, work, biography and privacy as a Viewer. The person page shows "Edit my details" and a Privacy card.
+- Close-family audience for posts and help items, filtered in SQL, with `404` for single-item access outside the circle. `updateComment` now also checks that the comment's post is in the family and visible (it previously did not check the post).
+- Family settings: the Creator chooses the close-family degree (1–6, default 3) on the Overview.
+- Who's who page (`/app/families/:id/directory`): people grouped by circle with relationship, occupation, studies, city and "can help with", plus search over visible fields.
+- Help board (`/app/families/:id/help`): requests and offers by category, replies, mark sorted/reopen, author or Creator delete (audited).
+- DNA matches beta (`/app/dna`, `/api/v1/dna/matches`): report a match by account ID with provider and shared cM, the other account confirms, relationship estimate from shared-cM bands, either side deletes. No raw DNA stored. Never grants family access.
+- Tree nodes show your relationship to each person and circle your own node in red pen. Feed posts can be shared with close family only and carry a "Close family" badge.
+- The main navigation scrolls horizontally on narrow phones. Verified at 390px with no page-level horizontal scroll.
+
 ## Partially implemented capabilities
+
+- Close-family posts cannot be moderated by a Creator outside the author's circle, because they can't see them. This follows RULE-CIRCLE-04.
+- Kinship labels are English only. There are no Tamil or Hindi terms and no elder/younger distinctions yet (banyan-spec M5).
+- Full and half siblings are not distinguished, and partners are inferred only from shared children. There is no explicit spouse/union record, so a childless couple is not linked as partners.
+- DNA matches are found by account ID, like friend requests. There is no search by email or name.
 
 - Post attachments and account avatars can be uploaded through the API, but the UI only uploads person profile photos.
 - Cloudflare deployment: the D1 database `banyan-db` and R2 bucket `banyan-media` exist on the Cloudflare account (created 2026-09-23). The Access application has not been created, `AUTH_AUDIENCE` in `wrangler.jsonc` is still a placeholder, migrations have not been applied to the remote database, and the Worker has not been deployed.
 
-Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF export, external import, AI) remain intentionally out of scope per the plan.
+Deferred features (DMs, public feed, spouse relationship, privacy finer than the field groups, PDF export, external import, AI, direct DNA-provider integrations) remain intentionally out of scope per the plan.
 
 ## Database
 
@@ -113,8 +135,10 @@ Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF
 
 ## Tests
 
-- `tests/setup.ts`, `tests/helpers.ts`, `tests/family.test.ts`, `tests/authorization.test.ts`, `tests/hardening.test.ts`, `tests/engagement.test.ts`, `tests/cloudflare.test.ts`.
-- 50 tests across 5 files.
+- `tests/setup.ts`, `tests/helpers.ts`, `tests/family.test.ts`, `tests/authorization.test.ts`, `tests/hardening.test.ts`, `tests/engagement.test.ts`, `tests/cloudflare.test.ts`, `tests/kinship.test.ts`, `tests/circles.test.ts`.
+- 72 tests across 7 files.
+- Kinship unit tests: blood and by-marriage labels, degree symmetry over every pair, shortest path with double descent, distant-generation names, and DNA shared-cM estimates.
+- Circles integration tests (negative cases included): Creator-only one-to-one linking with audit; cross-family person rejected; far, unlinked and Editor views of close-only fields; list, tree and export filtering; the Creator widening the close-family degree; search limited to visible fields; self-service limits; birthday reminders following privacy; close-family posts hidden from far, unlinked and Editor accounts (feed, comments, reactions); help board flow, author-only status changes, replies refused when resolved, close-only items, outsider and friend denied, Creator moderation audit; DNA consent (third party 404, reporter can't confirm), duplicates, self-match, cM bounds, withdrawal erases, and no family access through a match.
 - Covers family lifecycle, invitations, role authorization, cross-family isolation, tree cycles/self-edges, expired/duplicate invitations, and friendship-without-family-access.
 - Also covers Viewer posting/export, whole-family and depth-limited tree projections, tree query validation, friend requests to unknown accounts, friend display names, and mutual friend requests.
 - New hardening coverage: development sign-in is absent and cannot mint tokens when disabled, a single-use invitation accepts exactly one account (including two concurrent acceptances), person deletion soft-deletes and detaches relationships, ownership transfer swaps roles, exports are audited, and sensitive mutations write audit events.

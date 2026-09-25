@@ -237,8 +237,14 @@ export function formatDate(value: string | null | undefined): string {
   });
 }
 
-export function lifeSpan(person: { dateOfBirth?: string | null; dateOfDeath?: string | null }) {
-  const born = person.dateOfBirth?.slice(0, 4);
+export function lifeSpan(person: {
+  dateOfBirth?: string | null;
+  dateOfDeath?: string | null;
+  /** Sent when the full birth date is private to this viewer. */
+  birthYear?: number | null;
+}) {
+  const born =
+    person.dateOfBirth?.slice(0, 4) ?? (person.birthYear ? String(person.birthYear) : "");
   const died = person.dateOfDeath?.slice(0, 4);
   if (born && died) return `${born} – ${died}`;
   if (born) return `b. ${born}`;

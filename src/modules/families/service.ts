@@ -13,6 +13,7 @@ import type { Account } from "~/lib/context";
 import { hashToken, randomToken } from "~/lib/crypto";
 import { auditValues } from "~/modules/audit/service";
 import type { Membership } from "~/modules/auth/policy";
+import { getPerson } from "~/modules/people/service";
 
 export async function createFamily(
   account: Account,
@@ -87,7 +88,7 @@ export async function getFamily(familyId: string) {
 export async function updateFamily(
   account: Account,
   familyId: string,
-  input: { name?: string; description?: string | null },
+  input: { name?: string; description?: string | null; closeFamilyDegree?: number },
 ) {
   const row = await getMembership(familyId, account.id);
   if (!row || row.role !== "CREATOR") throw Errors.FORBIDDEN();
@@ -100,6 +101,7 @@ export async function updateFamily(
       .set({
         name: input.name,
         description: input.description,
+        closeFamilyDegree: input.closeFamilyDegree,
         updatedAt: now,
       })
       .where(eq(families.id, familyId)),
@@ -119,6 +121,7 @@ export async function updateFamily(
     ...family,
     name: input.name ?? family.name,
     description: input.description === undefined ? family.description : input.description,
+    closeFamilyDegree: input.closeFamilyDegree ?? family.closeFamilyDegree,
     updatedAt: now,
   };
 }
@@ -194,6 +197,64 @@ export async function updateMembership(
     ),
   ]);
   return mapMembership({ ...target, role });
+}
+
+/**
+ * Links a member account to the person who represents them in the tree
+ * ("this is me"), or unlinks it with `personId: null`. Creator-only, because
+ * the link decides who counts as close family (INV-MEMBER-02 keeps it one-to-one).
+ */
+export async function linkMemberPerson(
+  actor: Account,
+  familyId: string,
+  membershipId: string,
+  personId: string | null,
+) {
+  const actorMembership = await getMembership(familyId, actor.id);
+  if (!actorMembership || actorMembership.role !== "CREATOR") throw Errors.FORBIDDEN();
+  const target = await db.query.familyMemberships.findFirst({
+    where: and(eq(familyMemberships.id, membershipId), eq(familyMemberships.familyId, familyId)),
+  });
+  if (!target || target.removedAt) throw Errors.NOT_FOUND();
+
+  if (personId) {
+    await getPerson(familyId, personId).catch(() => {
+      throw Errors.PERSON_NOT_IN_FAMILY();
+    });
+    const claimed = await db.query.familyMemberships.findFirst({
+      where: and(
+        eq(familyMemberships.familyId, familyId),
+        eq(familyMemberships.personId, personId),
+        isNull(familyMemberships.removedAt),
+      ),
+    });
+    if (claimed && claimed.id !== membershipId) {
+      throw Errors.CONFLICT("That person is already linked to another member.");
+    }
+  }
+
+  try {
+    await db.batch([
+      db.update(familyMemberships).set({ personId }).where(eq(familyMemberships.id, membershipId)),
+      db.insert(auditEvents).values(
+        auditValues({
+          actorAccountId: actor.id,
+          familyId,
+          action: "MEMBERSHIP_PERSON_LINKED",
+          targetType: "FamilyMembership",
+          targetId: membershipId,
+          summary: { from: target.personId, to: personId },
+        }),
+      ),
+    ]);
+  } catch (error) {
+    // The partial unique index settles a race between two links to one person.
+    if (String((error as Error)?.message ?? error).includes("UNIQUE")) {
+      throw Errors.CONFLICT("That person is already linked to another member.");
+    }
+    throw error;
+  }
+  return mapMembership({ ...target, personId });
 }
 
 export async function removeMembership(actor: Account, familyId: string, membershipId: string) {

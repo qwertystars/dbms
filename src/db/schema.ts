@@ -17,6 +17,28 @@ export const reactionTypeEnum = ["LIKE", "LOVE", "LAUGH", "SAD"] as const;
 export const mediaPurposeEnum = ["ACCOUNT_AVATAR", "PERSON_PROFILE", "POST_ATTACHMENT"] as const;
 export const mediaStatusEnum = ["PENDING", "READY", "DELETING", "DELETED"] as const;
 export const friendRequestStatusEnum = ["PENDING", "ACCEPTED", "REJECTED", "CANCELLED"] as const;
+export const audienceEnum = ["FAMILY", "CLOSE"] as const;
+export const helpKindEnum = ["REQUEST", "OFFER"] as const;
+export const helpCategoryEnum = [
+  "ADVICE",
+  "CAREER",
+  "EDUCATION",
+  "HEALTH",
+  "HOUSING",
+  "TRAVEL",
+  "CARE",
+  "OTHER",
+] as const;
+export const helpStatusEnum = ["OPEN", "RESOLVED", "CLOSED"] as const;
+export const dnaProviderEnum = [
+  "ANCESTRY",
+  "TWENTY_THREE_AND_ME",
+  "MYHERITAGE",
+  "FTDNA",
+  "GEDMATCH",
+  "OTHER",
+] as const;
+export const dnaMatchStatusEnum = ["PENDING", "CONFIRMED"] as const;
 
 export type FamilyRole = (typeof familyRoleEnum)[number];
 export type InvitationRole = (typeof invitationRoleEnum)[number];
@@ -24,6 +46,12 @@ export type ReactionType = (typeof reactionTypeEnum)[number];
 export type MediaPurpose = (typeof mediaPurposeEnum)[number];
 export type MediaStatus = (typeof mediaStatusEnum)[number];
 export type FriendRequestStatus = (typeof friendRequestStatusEnum)[number];
+export type Audience = (typeof audienceEnum)[number];
+export type HelpKind = (typeof helpKindEnum)[number];
+export type HelpCategory = (typeof helpCategoryEnum)[number];
+export type HelpStatus = (typeof helpStatusEnum)[number];
+export type DnaProvider = (typeof dnaProviderEnum)[number];
+export type DnaMatchStatus = (typeof dnaMatchStatusEnum)[number];
 
 export const accounts = sqliteTable("accounts", {
   id: text("id")
@@ -46,6 +74,8 @@ export const families = sqliteTable("families", {
     .$defaultFn(() => nanoid()),
   name: text("name").notNull(),
   description: text("description"),
+  /** Kinship degree up to which relatives count as close family (see RULE-CIRCLE-01). */
+  closeFamilyDegree: integer("close_family_degree").notNull().default(3),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .$defaultFn(() => new Date()),
@@ -94,7 +124,12 @@ export const people = sqliteTable(
     email: text("email"),
     phone: text("phone"),
     occupation: text("occupation"),
+    education: text("education"),
+    city: text("city"),
+    skills: text("skills"),
     biography: text("biography"),
+    /** Per field-group visibility overrides; missing groups use the defaults. */
+    fieldVisibility: text("field_visibility", { mode: "json" }).$type<Record<string, string>>(),
     profileMediaId: text("profile_media_id").references(() => mediaAssets.id),
     createdByAccountId: text("created_by_account_id")
       .notNull()
@@ -221,6 +256,7 @@ export const posts = sqliteTable(
       .notNull()
       .references(() => accounts.id),
     body: text("body").notNull(),
+    audience: text("audience", { enum: audienceEnum }).notNull().default("FAMILY"),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
       .$defaultFn(() => new Date()),
@@ -344,6 +380,98 @@ export const friendships = sqliteTable(
       name: "friendships_pkey",
     }),
     noSelfCheck: check("friendships_no_self", sql`${table.accountLowId} <> ${table.accountHighId}`),
+  }),
+);
+
+export const helpRequests = sqliteTable(
+  "help_requests",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => nanoid()),
+    familyId: text("family_id")
+      .notNull()
+      .references(() => families.id),
+    authorAccountId: text("author_account_id")
+      .notNull()
+      .references(() => accounts.id),
+    kind: text("kind", { enum: helpKindEnum }).notNull(),
+    category: text("category", { enum: helpCategoryEnum }).notNull(),
+    title: text("title").notNull(),
+    body: text("body"),
+    audience: text("audience", { enum: audienceEnum }).notNull().default("FAMILY"),
+    status: text("status", { enum: helpStatusEnum }).notNull().default("OPEN"),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    resolvedAt: integer("resolved_at", { mode: "timestamp" }),
+    deletedAt: integer("deleted_at", { mode: "timestamp" }),
+  },
+  (table) => ({
+    familyStatusIdx: index("help_requests_family_id_status").on(table.familyId, table.status),
+  }),
+);
+
+export const helpResponses = sqliteTable(
+  "help_responses",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => nanoid()),
+    helpRequestId: text("help_request_id")
+      .notNull()
+      .references(() => helpRequests.id),
+    authorAccountId: text("author_account_id")
+      .notNull()
+      .references(() => accounts.id),
+    body: text("body").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    deletedAt: integer("deleted_at", { mode: "timestamp" }),
+  },
+  (table) => ({
+    requestIdx: index("help_responses_help_request_id").on(table.helpRequestId),
+  }),
+);
+
+/**
+ * A DNA relative match reported by one account and confirmed by the other.
+ * Only the summary a testing provider shows (shared centimorgans) is stored,
+ * never raw genetic data. The pair is canonically ordered so there is at most
+ * one match per two accounts.
+ */
+export const dnaMatches = sqliteTable(
+  "dna_matches",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => nanoid()),
+    accountLowId: text("account_low_id")
+      .notNull()
+      .references(() => accounts.id),
+    accountHighId: text("account_high_id")
+      .notNull()
+      .references(() => accounts.id),
+    reporterAccountId: text("reporter_account_id")
+      .notNull()
+      .references(() => accounts.id),
+    provider: text("provider", { enum: dnaProviderEnum }).notNull(),
+    sharedCm: real("shared_cm").notNull(),
+    sharedSegments: integer("shared_segments"),
+    note: text("note"),
+    status: text("status", { enum: dnaMatchStatusEnum }).notNull().default("PENDING"),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    confirmedAt: integer("confirmed_at", { mode: "timestamp" }),
+  },
+  (table) => ({
+    pairUq: uniqueIndex("dna_matches_pair").on(table.accountLowId, table.accountHighId),
+    highIdx: index("dna_matches_account_high_id").on(table.accountHighId),
   }),
 );
 

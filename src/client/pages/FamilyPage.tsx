@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { api, errorMessage } from "~/client/api";
 import { useAuth } from "~/client/auth";
 import { FamilyHeader } from "~/client/components/FamilyNav";
+import { KinshipTag } from "~/client/components/kinship";
 import {
   Alert,
   Avatar,
@@ -17,6 +18,15 @@ import {
   lifeSpan,
   useBusy,
 } from "~/client/components/ui";
+
+const CLOSE_DEGREES: [number, string][] = [
+  [1, "Parents, children and partners"],
+  [2, "…plus siblings, grandparents and grandchildren"],
+  [3, "…plus aunts, uncles, nieces and nephews"],
+  [4, "…plus first cousins"],
+  [5, "…plus first cousins once removed"],
+  [6, "…plus second cousins"],
+];
 
 export function FamilyPage() {
   const { familyId } = useParams<{ familyId: string }>();
@@ -82,6 +92,38 @@ export function FamilyPage() {
     await load();
   }
 
+  async function linkPerson(member: any, personId: string) {
+    const res = await runMember(() =>
+      api("PUT", `/api/v1/families/${familyId}/members/${member.id}/person`, {
+        personId: personId || null,
+      }),
+    );
+    if (!res || res.status !== 200) {
+      setError(res ? errorMessage(res, "Could not link this member.") : null);
+      return;
+    }
+    setError(null);
+    setNotice(
+      personId
+        ? `${member.account?.displayName || "Member"} is now linked to their place in the tree.`
+        : "Link removed.",
+    );
+    await load();
+  }
+
+  async function saveCloseDegree(degree: number) {
+    const res = await runMember(() =>
+      api("PATCH", `/api/v1/families/${familyId}`, { closeFamilyDegree: degree }),
+    );
+    if (!res || res.status !== 200) {
+      setError(res ? errorMessage(res, "Could not save the setting.") : null);
+      return;
+    }
+    setError(null);
+    setNotice("Close family setting saved.");
+    await load();
+  }
+
   async function removeMember(member: any) {
     const name = member.account?.displayName || "this member";
     if (!window.confirm(`Remove ${name} from the family?`)) return;
@@ -112,6 +154,9 @@ export function FamilyPage() {
       "email",
       "phone",
       "occupation",
+      "education",
+      "city",
+      "skills",
       "biography",
     ]) {
       const value = formData.get(key);
@@ -135,6 +180,8 @@ export function FamilyPage() {
   if (!data) return <Loading />;
 
   const role = data.membership.role;
+  const peopleById = new Map<string, any>(data.people.map((p: any) => [p.id, p]));
+  const linkedPersonIds = new Set(data.members.map((m: any) => m.personId).filter(Boolean));
 
   return (
     <>
@@ -177,7 +224,9 @@ export function FamilyPage() {
                           deceased={Boolean(p.dateOfDeath)}
                         />
                         <div className="list-item-main">
-                          <div className="list-item-title">{p.name}</div>
+                          <div className="list-item-title">
+                            {p.name} <KinshipTag kinship={p.kinship} />
+                          </div>
                           <div className="list-item-meta">
                             {[capitalize(p.gender), lifeSpan(p), p.occupation]
                               .filter(Boolean)
@@ -222,6 +271,20 @@ export function FamilyPage() {
                       <Field label="Occupation" optional>
                         <input className="input" name="occupation" maxLength={255} />
                       </Field>
+                      <Field label="Studies / education" optional>
+                        <input className="input" name="education" maxLength={255} />
+                      </Field>
+                      <Field label="Lives in (city)" optional>
+                        <input className="input" name="city" maxLength={255} />
+                      </Field>
+                      <Field label="Can help with" optional>
+                        <input
+                          className="input"
+                          name="skills"
+                          maxLength={1000}
+                          placeholder="e.g. tax forms, maths tutoring"
+                        />
+                      </Field>
                       <Field label="Email" optional>
                         <input className="input" name="email" type="email" maxLength={255} />
                       </Field>
@@ -256,13 +319,20 @@ export function FamilyPage() {
             <Card title="Members" description="Accounts with access to this family" flush>
               <ul className="list">
                 {data.members.map((m: any) => (
-                  <li key={m.id} className="list-item">
+                  <li key={m.id} className="list-item member-item">
                     <Avatar name={m.account?.displayName} size="sm" />
                     <div className="list-item-main">
                       <div className="list-item-title">
                         {m.account?.displayName || "Unknown"}
                         {m.accountId === me?.id && <span className="subtle"> (you)</span>}
                       </div>
+                      {role !== "CREATOR" && (
+                        <div className="list-item-meta">
+                          {m.personId && peopleById.get(m.personId)
+                            ? `Is ${peopleById.get(m.personId).name}`
+                            : "Not placed in the tree"}
+                        </div>
+                      )}
                     </div>
                     {role === "CREATOR" && m.role !== "CREATOR" ? (
                       <div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
@@ -288,9 +358,69 @@ export function FamilyPage() {
                     ) : (
                       <RoleBadge role={m.role} />
                     )}
+                    {role === "CREATOR" && (
+                      <label className="member-link">
+                        <span className="visually-hidden">
+                          Who {m.account?.displayName || "this member"} is in the tree
+                        </span>
+                        <select
+                          className="select select-sm"
+                          value={m.personId ?? ""}
+                          disabled={memberBusy}
+                          onChange={(e) => void linkPerson(m, e.target.value)}
+                        >
+                          <option value="">Not in the tree yet</option>
+                          {data.people
+                            .filter((p: any) => p.id === m.personId || !linkedPersonIds.has(p.id))
+                            .map((p: any) => (
+                              <option key={p.id} value={p.id}>
+                                In the tree as {p.name}
+                              </option>
+                            ))}
+                        </select>
+                      </label>
+                    )}
                   </li>
                 ))}
               </ul>
+            </Card>
+
+            <Card
+              title="Close family"
+              description="Close family see each other's contact details and close-only posts. Everyone else in the family sees less."
+            >
+              <div className="stack-sm">
+                {role === "CREATOR" ? (
+                  <Field label="Count as close family up to">
+                    <select
+                      className="select"
+                      value={data.family.closeFamilyDegree}
+                      disabled={memberBusy}
+                      onChange={(e) => void saveCloseDegree(Number(e.target.value))}
+                    >
+                      {CLOSE_DEGREES.map(([degree, label]) => (
+                        <option key={degree} value={degree}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                ) : (
+                  <p>
+                    {CLOSE_DEGREES.find(([d]) => d === data.family.closeFamilyDegree)?.[1] ??
+                      `Relatives within ${data.family.closeFamilyDegree} steps`}
+                  </p>
+                )}
+                {!data.membership.personId && (
+                  <p className="subtle">
+                    You aren't placed in the tree yet, so everyone counts as extended family for
+                    you.{" "}
+                    {role === "CREATOR"
+                      ? "Pick who you are in the Members list."
+                      : "Ask the Creator to link you."}
+                  </p>
+                )}
+              </div>
             </Card>
 
             {role === "CREATOR" && (

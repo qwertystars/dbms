@@ -53,6 +53,12 @@ The target application also includes:
 - private family posts, comments, and reactions
 - a chronological feed with author names, reaction counts, and comment threads
 - birthday and remembrance reminders built from existing family-tree dates
+- close and far family: each member is placed in the tree, everyone's relationship to you is worked out ("your aunt", "first cousin once removed"), and far relatives see less (contact details and address are close-family only by default)
+- per-person privacy for groups of profile fields, which the person can manage themselves
+- a "Who's who" directory of what everyone does, where they live and what they can help with
+- a family help board for asking for and offering help
+- posts and help items that can be shared with close family only
+- DNA matches (beta): consented, summary-only (shared cM) matches between accounts, with a relationship estimate
 - account-to-account friend connections
 - family invitations
 - family-data export

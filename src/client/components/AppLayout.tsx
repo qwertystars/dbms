@@ -54,6 +54,7 @@ export function AppLayout() {
             </NavLink>
             <NavLink to="/app/families">Families</NavLink>
             <NavLink to="/app/friends">Friends</NavLink>
+            <NavLink to="/app/dna">DNA</NavLink>
           </nav>
           <div className="topbar-user">
             <ThemeToggle />

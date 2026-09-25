@@ -4,10 +4,17 @@ import { accounts, auditEvents, comments, familyMemberships, posts, reactions } 
 import { Errors } from "~/lib/errors";
 import type { Account } from "~/lib/context";
 import { auditValues } from "~/modules/audit/service";
-import type { ReactionType } from "~/db/schema";
+import type { Audience, ReactionType } from "~/db/schema";
+import {
+  canSeeAudience,
+  closeAccountIds,
+  loadViewerContext,
+  type ViewerContext,
+} from "~/modules/kinship/service";
 
 export interface PostInput {
   body: string;
+  audience?: Audience;
 }
 
 export type ReactionSummary = Record<ReactionType, number>;
@@ -18,16 +25,27 @@ function emptyReactions(): ReactionSummary {
 
 export async function createPost(account: Account, familyId: string, input: PostInput) {
   // Any active member may post, including Viewers (see the permission matrix).
-  await requireActiveMembership(account.id, familyId);
+  const ctx = await loadViewerContext(account.id, familyId);
+  assertAudienceAllowed(ctx, input.audience);
   const [post] = await db
     .insert(posts)
     .values({
       familyId,
       authorAccountId: account.id,
       body: input.body,
+      audience: input.audience ?? "FAMILY",
     })
     .returning();
   return post;
+}
+
+/** Close-family content needs the author to be placed in the tree. */
+export function assertAudienceAllowed(ctx: ViewerContext, audience: Audience | undefined) {
+  if (audience === "CLOSE" && !ctx.personId) {
+    throw Errors.VALIDATION(
+      "Close-family sharing needs your account linked to your person in the tree. Ask the family's Creator to link you.",
+    );
+  }
 }
 
 interface Cursor {
@@ -44,8 +62,12 @@ function parseCursor(cursor?: string): Cursor | null {
 }
 
 export async function listPosts(account: Account, familyId: string, cursor?: string, limit = 20) {
-  await requireActiveMembership(account.id, familyId);
-  const base = and(eq(posts.familyId, familyId), isNull(posts.deletedAt));
+  const ctx = await loadViewerContext(account.id, familyId);
+  const base = and(
+    eq(posts.familyId, familyId),
+    isNull(posts.deletedAt),
+    or(eq(posts.audience, "FAMILY"), inArray(posts.authorAccountId, closeAccountIds(ctx))),
+  );
   const parsed = parseCursor(cursor);
   // Timestamps have second precision, so the id is part of the cursor to keep
   // posts created within the same second from being skipped.
@@ -129,11 +151,14 @@ export async function listPosts(account: Account, familyId: string, cursor?: str
 }
 
 export async function getPost(account: Account, familyId: string, postId: string) {
-  await requireActiveMembership(account.id, familyId);
+  const ctx = await loadViewerContext(account.id, familyId);
   const post = await db.query.posts.findFirst({
     where: and(eq(posts.id, postId), eq(posts.familyId, familyId), isNull(posts.deletedAt)),
   });
-  if (!post) throw Errors.NOT_FOUND();
+  // A close-family post is indistinguishable from a missing one outside the circle.
+  if (!post || !canSeeAudience(ctx, post.audience, post.authorAccountId)) {
+    throw Errors.NOT_FOUND();
+  }
   return post;
 }
 
@@ -146,9 +171,11 @@ export async function updatePost(
   const post = await getPost(account, familyId, postId);
   if (post.authorAccountId !== account.id)
     throw Errors.FORBIDDEN("You can only edit your own posts.");
+  if (input.audience)
+    assertAudienceAllowed(await loadViewerContext(account.id, familyId), input.audience);
   const [updated] = await db
     .update(posts)
-    .set({ body: input.body, updatedAt: new Date() })
+    .set({ body: input.body, audience: input.audience ?? post.audience, updatedAt: new Date() })
     .where(eq(posts.id, postId))
     .returning();
   return updated;
@@ -230,6 +257,7 @@ export async function updateComment(
     ),
   });
   if (!comment) throw Errors.NOT_FOUND();
+  await getPost(account, familyId, comment.postId);
   const [updated] = await db
     .update(comments)
     .set({ body: input.body, updatedAt: new Date() })

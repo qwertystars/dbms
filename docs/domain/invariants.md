@@ -116,6 +116,34 @@ These properties must remain true regardless of UI behavior.
 
 **Statement:** Role, ownership, destructive person/tree, and family-deletion operations must produce an audit event on success.
 
+## INV-PRIVACY-01 — Hidden fields never leave the server
+
+**Statement:** A profile field group hidden from a viewer (RULE-PRIVACY-02) is never included in any response, export, search match or reminder for that viewer.
+
+**Enforced by:** `presentPerson` in `src/modules/people/visibility.ts`, used by every person-returning path.
+
+**Verification:** `tests/circles.test.ts` (person, list, tree, export, search and reminders as far family).
+
+## INV-AUTHZ-03 — Close-family content stays in the circle
+
+**Statement:** A post or help item with audience `CLOSE` is never returned to, commented on, reacted to or answered by a member outside the author's close family.
+
+**Enforced by:** `canSeeAudience` and `closeAccountIds` in `src/modules/kinship/service.ts`, applied in list queries and single-item lookups.
+
+**Verification:** `tests/circles.test.ts` (far, unlinked and Editor accounts).
+
+## INV-DNA-01 — DNA matches are consented and private
+
+**Statement:** A DNA match is visible only to its two accounts, becomes confirmed only through the non-reporting account, and never authorizes family access.
+
+**Verification:** `tests/circles.test.ts` (DNA matches).
+
+## INV-KIN-01 — Kinship degree is symmetric
+
+**Statement:** For any two people, the degree from A to B equals the degree from B to A, so close-family checks may be evaluated from either side.
+
+**Verification:** `tests/kinship.test.ts`.
+
 ## Current compliance
 
 Project is greenfield and unimplemented. Therefore all implementation-dependent invariants are currently **NOT YET ENFORCED**, not "violated by an existing system".
