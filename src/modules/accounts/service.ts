@@ -34,6 +34,18 @@ export async function getAccountById(id: string): Promise<Account | undefined> {
   return row ? mapAccount(row) : undefined;
 }
 
+export async function updateAccount(
+  account: Account,
+  input: { displayName: string },
+): Promise<Account> {
+  const [row] = await db
+    .update(accounts)
+    .set({ displayName: input.displayName, updatedAt: new Date() })
+    .where(eq(accounts.id, account.id))
+    .returning();
+  return mapAccount(row);
+}
+
 function mapAccount(row: typeof accounts.$inferSelect): Account {
   return {
     id: row.id,

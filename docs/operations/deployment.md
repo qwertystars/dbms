@@ -2,127 +2,84 @@
 
 ## Target topology
 
-V1:
-
 ```text
 Browser
   |
 HTTPS
   |
-Cloudflare Workers (Hono API + Vite SPA static assets)
+Cloudflare Access (email one-time PIN or Google, team qwertystars)
   |
-  |-------------------|-------------------|
-  |                   |                   |
-Cloudflare D1    Cloudflare R2    Object storage (optional/S3-compatible)
+Cloudflare Worker "banyan" (Hono API + Vite SPA static assets)
+  |
+  |------------------|------------------|
+Cloudflare D1      Cloudflare R2      Workers rate limiting
+(banyan-db)        (banyan-media)     (RATE_LIMITER)
 ```
 
-The Worker entry is `src/worker.ts`. It serves the Hono API for `/api/*`
-requests (`run_worker_first` in `wrangler.jsonc`) and delegates every other
-path to the static assets binding, which serves the Vite build output in
-`dist/` with single-page-application fallback (`not_found_handling`).
+The Worker entry is `src/worker.ts`. It serves the Hono API for `/api/*` requests
+(`run_worker_first` in `wrangler.jsonc`) and delegates every other path to the static assets
+binding, which serves `dist/` with single-page-application fallback.
 
-Authentication may use an external OIDC/OAuth provider.
+Production URL: `https://banyan.srijan-guchhait.workers.dev` on the Cloudflare account
+"Srijan.guchhait@gmail.com's Account".
 
-No queue or cache service is required for initial deployment.
+## Resources
 
-## Environments
+| Resource           | Name / value                                          |
+| ------------------ | ----------------------------------------------------- |
+| Worker             | `banyan`                                              |
+| D1 database        | `banyan-db` (`9f1b3386-bd11-493f-852d-9915821e71aa`)  |
+| R2 bucket          | `banyan-media` (private; read only through the API)   |
+| Rate limit binding | `RATE_LIMITER`, namespace `1001`, 100 requests / 60s  |
+| Access application | "Banyan", domain `banyan.srijan-guchhait.workers.dev` |
+| Access team        | `qwertystars.cloudflareaccess.com`                    |
 
-Maintain:
+## Configuration
 
-- local
-- staging
-- production
+All production settings are plain `vars` in `wrangler.jsonc`; there are no secrets.
 
-Production must not share database credentials or storage buckets with local/staging.
+| Variable        | Production value                                                |
+| --------------- | --------------------------------------------------------------- |
+| `AUTH_PROVIDER` | `cloudflare-access`                                             |
+| `AUTH_ISSUER`   | `https://qwertystars.cloudflareaccess.com`                      |
+| `AUTH_JWKS_URI` | `https://qwertystars.cloudflareaccess.com/cdn-cgi/access/certs` |
+| `AUTH_AUDIENCE` | the Access application's AUD tag                                |
+| `APP_BASE_URL`  | `https://banyan.srijan-guchhait.workers.dev`                    |
 
-## Required environment categories
+Never set `AUTH_DEV_MODE` in production. When it is not `"true"` the development
+`/api/auth/login` route is not mounted, so only Access tokens are accepted.
 
-```text
-# Local / tests
-DATABASE_URL=file:./dev.db
+## First-time setup
 
-APP_BASE_URL
-NODE_ENV
-
-AUTH_JWKS_URI or AUTH_JWKS
-AUTH_ISSUER
-AUTH_AUDIENCE
-
-# Optional S3-compatible media storage (legacy / on-prem)
-OBJECT_STORAGE_ENDPOINT
-OBJECT_STORAGE_BUCKET
-OBJECT_STORAGE_ACCESS_KEY
-OBJECT_STORAGE_SECRET_KEY
-OBJECT_STORAGE_REGION
-OBJECT_STORAGE_FORCE_PATH_STYLE
-```
-
-Actual variable names must be centralized in a validated environment schema.
-
-In the Cloudflare Workers runtime the `DB` D1 binding and `MEDIA_BUCKET` R2 binding are read from `wrangler.jsonc` and the request context.
-
-## Cloudflare deployment steps
-
-1. Install dependencies:
+1. Create the D1 database and R2 bucket (done; IDs above).
+2. Create the Access application (Zero Trust → Access → Applications → Add → Self-hosted):
+   - domain `banyan.srijan-guchhait.workers.dev`
+   - identity providers: One-time PIN and Google
+   - session duration 30 days
+   - one Allow policy that includes Everyone
+3. Copy the application's AUD tag into `AUTH_AUDIENCE` in `wrangler.jsonc`.
+4. Sign wrangler in: `pnpm exec wrangler login`.
+5. Apply migrations and deploy:
 
    ```bash
-   pnpm install
-   ```
-
-2. Create and configure D1 databases (one per environment) and update `wrangler.jsonc` with the `database_id` values.
-
-   ```bash
-   pnpm exec wrangler d1 create family-social-db
-   pnpm exec wrangler d1 create family-social-db-staging
-   pnpm exec wrangler d1 create family-social-db-prod
-   ```
-
-3. Apply migrations to each D1 database:
-
-   ```bash
-   pnpm exec wrangler d1 migrations apply family-social-db --local
-   pnpm exec wrangler d1 migrations apply family-social-db-staging
-   pnpm exec wrangler d1 migrations apply family-social-db-prod
-   ```
-
-   For production, run without `--local` and confirm.
-
-4. Create R2 buckets for media and update `wrangler.jsonc` bucket names:
-
-   ```bash
-   pnpm exec wrangler r2 bucket create family-social-media
-   pnpm exec wrangler r2 bucket create family-social-media-staging
-   pnpm exec wrangler r2 bucket create family-social-media-prod
-   ```
-
-5. Set secrets (do not commit them):
-
-   ```bash
-   pnpm exec wrangler secret put AUTH_JWKS_URI
-   pnpm exec wrangler secret put OBJECT_STORAGE_ACCESS_KEY
-   pnpm exec wrangler secret put OBJECT_STORAGE_SECRET_KEY
-   ```
-
-   Never set `AUTH_DEV_MODE` in production. It is off unless explicitly set to
-   `"true"`, and when off the development `/api/auth/login` route is not mounted
-   at all, so only tokens from the configured OIDC provider are accepted.
-
-6. Build and deploy:
-
-   ```bash
+   pnpm db:apply:cloudflare
    pnpm deploy:cloudflare
    ```
 
-   This runs `vite build` (SPA into `dist/`) and then `wrangler deploy`,
-   which bundles `src/worker.ts` directly. Use `--env staging` or
-   `--env production` (for example `pnpm exec wrangler deploy --env staging`)
-   to target the matching environment in `wrangler.jsonc`.
+## Routine deploys
 
-7. Verify the bundle with a dry-run before a real deploy:
+```bash
+pnpm build:cloudflare      # vite build + wrangler deploy --dry-run
+pnpm db:apply:cloudflare   # only when db/migrations changed
+pnpm deploy:cloudflare
+```
 
-   ```bash
-   pnpm build:cloudflare
-   ```
+## Staging
+
+There is no staging environment yet. To add one, create `banyan-db-staging` and
+`banyan-media-staging`, add an `env.staging` block to `wrangler.jsonc` with its own bindings,
+a separate Access application for `banyan-staging.srijan-guchhait.workers.dev`, and its own
+`AUTH_AUDIENCE`. Production must never share its database or bucket with staging.
 
 ## Local development
 
@@ -145,7 +102,8 @@ In the Cloudflare Workers runtime the `DB` D1 binding and `MEDIA_BUCKET` R2 bind
    `http://localhost:5173`, which proxies `/api/*` to the API server.
    `pnpm dev:api` sets `AUTH_DEV_MODE=true`, which enables the development
    cookie sign-in on `/api/auth/login`. Local data uses the libsql
-   `DATABASE_URL` (for example `file:./dev.db`).
+   `DATABASE_URL` (for example `file:./dev.db`). Uploaded photos are kept in
+   memory by the Node server and disappear when it restarts.
 
    For a production-faithful local run with real D1/R2 bindings, build the
    SPA and start the Workers runtime instead:

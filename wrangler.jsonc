@@ -1,9 +1,14 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "family-social-network",
+  "name": "banyan",
   "main": "src/worker.ts",
   "compatibility_date": "2026-09-05",
   "compatibility_flags": ["nodejs_compat"],
+  // Cloudflare Access protects banyan.srijan-guchhait.workers.dev. Version
+  // preview URLs are a different hostname that Access does not cover, so they
+  // stay off. The API verifies the Access token itself either way.
+  "workers_dev": true,
+  "preview_urls": false,
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
@@ -15,67 +20,35 @@
     "head_sampling_rate": 1,
   },
   "vars": {
-    "APP_BASE_URL": "https://family-social-network.YOUR_SUBDOMAIN.workers.dev",
-    "AUTH_ISSUER": "https://family-social-network.YOUR_SUBDOMAIN.workers.dev",
-    "AUTH_AUDIENCE": "family-social-network",
-    "OBJECT_STORAGE_FORCE_PATH_STYLE": "false",
+    "APP_BASE_URL": "https://banyan.srijan-guchhait.workers.dev",
+    // Sign-in is Cloudflare Access (email one-time PIN or Google) for the
+    // qwertystars team. AUTH_AUDIENCE is the Access application's AUD tag.
+    "AUTH_PROVIDER": "cloudflare-access",
+    "AUTH_ISSUER": "https://qwertystars.cloudflareaccess.com",
+    "AUTH_JWKS_URI": "https://qwertystars.cloudflareaccess.com/cdn-cgi/access/certs",
+    "AUTH_AUDIENCE": "SET_TO_ACCESS_APPLICATION_AUD_TAG",
   },
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "family-social-db",
-      "database_id": "<your-d1-database-id>",
+      "database_name": "banyan-db",
+      "database_id": "9f1b3386-bd11-493f-852d-9915821e71aa",
       "migrations_dir": "db/migrations",
     },
   ],
   "r2_buckets": [
     {
       "binding": "MEDIA_BUCKET",
-      "bucket_name": "family-social-media",
+      "bucket_name": "banyan-media",
     },
   ],
-  "env": {
-    "staging": {
-      "name": "family-social-network-staging",
-      "vars": {
-        "APP_BASE_URL": "https://staging.family-social-network.YOUR_SUBDOMAIN.workers.dev",
-        "AUTH_ISSUER": "https://staging.family-social-network.YOUR_SUBDOMAIN.workers.dev",
-      },
-      "d1_databases": [
-        {
-          "binding": "DB",
-          "database_name": "family-social-db-staging",
-          "database_id": "<your-staging-d1-database-id>",
-          "migrations_dir": "db/migrations",
-        },
-      ],
-      "r2_buckets": [
-        {
-          "binding": "MEDIA_BUCKET",
-          "bucket_name": "family-social-media-staging",
-        },
-      ],
+  // 100 API requests per minute per account (or per IP before sign-in),
+  // counted by Cloudflare across isolates.
+  "ratelimits": [
+    {
+      "name": "RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 100, "period": 60 },
     },
-    "production": {
-      "name": "family-social-network-prod",
-      "vars": {
-        "APP_BASE_URL": "https://family-social-network.YOUR_SUBDOMAIN.workers.dev",
-        "AUTH_ISSUER": "https://family-social-network.YOUR_SUBDOMAIN.workers.dev",
-      },
-      "d1_databases": [
-        {
-          "binding": "DB",
-          "database_name": "family-social-db-prod",
-          "database_id": "<your-prod-d1-database-id>",
-          "migrations_dir": "db/migrations",
-        },
-      ],
-      "r2_buckets": [
-        {
-          "binding": "MEDIA_BUCKET",
-          "bucket_name": "family-social-media-prod",
-        },
-      ],
-    },
-  },
+  ],
 }

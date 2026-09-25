@@ -92,7 +92,7 @@ export function DashboardPage() {
                   {events.slice(0, 6).map((event) => (
                     <li key={`${event.personId}-${event.type}`} className="event">
                       <span className={`event-icon event-${event.type}`}>
-                        <Icon name={event.type === "birthday" ? "cake" : "candle"} size={18} />
+                        <Icon name={event.type === "birthday" ? "cake" : "ring"} size={18} />
                       </span>
                       <div className="event-main">
                         <Link

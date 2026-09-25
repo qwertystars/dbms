@@ -24,7 +24,7 @@ The frontend is a Vite + React single-page application and the backend is a stan
 - Foreign-key enforcement is enabled on the local libsql client (`PRAGMA foreign_keys = ON`) to match D1, which enforces foreign keys on every query.
 - Environment validation with `dotenv`, including empty-string-to-undefined handling for optional values.
 - Hono-based REST API under `/api/v1` with request context, structured logging, security headers, and rate limiting.
-- Account provisioning via OIDC/OAuth subject.
+- Account provisioning from the token subject. Production sign-in is Cloudflare Access (email one-time PIN or Google): the API reads `Cf-Access-Jwt-Assertion` and verifies it against the Access team JWKS, issuer and audience (ADR-004). New accounts are named from the token's `name`, else the email's local part; `PATCH /me` and a "Your name" card on the Friends page let people rename themselves.
 - Development-only cookie sign-in mounted only when `AUTH_DEV_MODE=true` (`pnpm dev:api` sets it). The route is absent otherwise, so production Workers builds cannot mint trusted tokens.
 - Cookie and Bearer token authentication for both browser UI and API clients.
 - Family CRUD, member role management (CREATOR/EDITOR/VIEWER), invitations, ownership transfer, and soft delete.
@@ -34,27 +34,32 @@ The frontend is a Vite + React single-page application and the backend is a stan
 - Upcoming events: `GET /events/upcoming?days=45` returns birthdays and memorial anniversaries across every family the account belongs to, computed from existing `people.date_of_birth` / `people.date_of_death` values.
 - Audit events for family create/update/delete, membership role changes and removals, invitation creation and acceptance, ownership transfer, person create/update/delete, relationship add/remove, post delete, comment delete, and family export.
 - Friend requests, accept/reject/cancel, friendships, and unfriending. Concurrent single-use operations (invitation acceptance, friend acceptance, ownership transfer) are guarded by conditional SQL inside the batch so a lost race cannot create a membership without claiming the invitation.
-- Media asset records, upload intent/complete, and a placeholder upload URL. Actual object storage uploads are not implemented yet.
+- Media uploads to R2: `POST /media/upload-intents` (family membership checked; profile photos need Creator or Editor), `PUT /media/:id/content` (owner only; magic-byte type check; EXIF/XMP/text metadata stripped; stored in the `MEDIA_BUCKET` R2 binding, or an in-memory store on the Node server and in tests), `GET /media/:id/content` (family members only, `404` otherwise, private caching, ETag), and an idempotent `POST /media/:id/complete`.
+- Profile photos in the UI: Creators and Editors can add, change and remove a person's photo on the person page. The browser redraws the photo through a canvas first (applies EXIF rotation, drops metadata, caps the long edge at 1600 px, JPEG). Photos show in person, family and tree lists, and people with a death date get a pencil ring around their avatar.
 - JSON and CSV family export with audit logging.
 - Web UI (Vite + React SPA under `src/client/`, React Router): `/sign-in`, `/app` dashboard, family list, family detail, person detail, tree view, feed view, friends, and invitation acceptance. All data flows through the Hono API using the `auth_token` cookie.
 - Feed UI: post composer, four emoji reactions with live counts, expandable comment threads with author names, edit/delete for own posts, and Creator moderation of posts and comments.
 - Person profile UI: edit form (name, gender, life dates, occupation, contact details, height, weight, biography) for Creators and Editors, and Creator-only delete with confirmation. Deletion is a soft delete that also detaches family-tree links.
 - Member management UI: Creators can change member roles between Editor and Viewer and remove members.
 - Dashboard: family cards plus a "Coming up" card showing birthdays and remembrances in the next 60 days with relative dates.
-- Hardening: request logging, 100 req/minute per-account/IP rate limiting, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` headers.
+- Hardening: request logging, 100 req/minute per-account/IP rate limiting (the Workers `RATE_LIMITER` binding on Cloudflare, shared across isolates; an in-memory fallback on Node), `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` headers.
 - Cloudflare deployment ready:
   - `vite build` produces the SPA in `dist/`; `wrangler deploy` bundles `src/worker.ts` directly (the `~/*` tsconfig alias is resolved by Wrangler's bundler)
   - D1 database binding (`DB`)
   - R2 media bucket binding (`MEDIA_BUCKET`)
-  - `wrangler.jsonc` with `run_worker_first: ["/api/*"]`, `not_found_handling: "single-page-application"`, and staging/production environment overrides
+  - `wrangler.jsonc` for the `banyan` Worker with real resource IDs, `run_worker_first: ["/api/*"]`, `not_found_handling: "single-page-application"`, `preview_urls: false`, and the `RATE_LIMITER` binding. There is no staging environment.
   - `pnpm preview:cloudflare` builds the SPA and runs the real Workers runtime (`wrangler dev`) with local D1/R2 bindings and the development sign-in enabled (`AUTH_DEV_MODE=true`)
   - `.dev.vars.example` documents optional local Worker variables; `.dev.vars` is gitignored
   - `wrangler types` generated worker types
 
+## Specification status
+
+`docs/product/banyan-spec.md` (Banyan brand kit and implementation spec, v0.1, 2026-09-23) was added as a newer product input. Apart from the branding slice above, none of it is implemented. It differs from the current implementation in storage (Postgres versus D1), web stack (Next.js, Tailwind, shadcn versus Vite and plain CSS), data model (unions and child links, placeholders, fuzzy dates, field visibility versus direct parent-child edges) and the permission matrix (for example, editors may invite viewers and only creators export JSON). These conflicts are not resolved yet; the older normative docs still describe the implemented behaviour.
+
 ## Partially implemented capabilities
 
-- Media uploads: the API creates asset rows and returns a placeholder upload URL; the file never reaches R2/S3 and there is no upload route yet.
-- Production OIDC onboarding: tokens issued by an external provider are accepted when `AUTH_JWKS_URI` or `AUTH_JWKS` is configured, but the app has no interactive provider flow of its own.
+- Post attachments and account avatars can be uploaded through the API, but the UI only uploads person profile photos.
+- Cloudflare deployment: the D1 database `banyan-db` and R2 bucket `banyan-media` exist on the Cloudflare account (created 2026-09-23). The Access application has not been created, `AUTH_AUDIENCE` in `wrangler.jsonc` is still a placeholder, migrations have not been applied to the remote database, and the Worker has not been deployed.
 
 Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF export, external import, AI) remain intentionally out of scope per the plan.
 
@@ -82,7 +87,8 @@ Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF
 - `src/client/api.ts` is a small `fetch` wrapper; authentication rides on the same-origin `auth_token` cookie.
 - `src/client/auth.tsx` provides an `AuthProvider` (`/api/v1/me`) and a `RequireAuth` guard that redirects to `/sign-in?returnTo=…`.
 - Vite dev server proxies `/api` to the Hono server on `localhost:3000`.
-- Visual design: a single dependency-free stylesheet, `src/client/styles.css`, defines design tokens (colors, radii, shadows, fonts) on `:root` with a dark-mode override via `prefers-color-scheme`, plus plain component classes (`.card`, `.btn`, `.input`, `.list`, `.tabs`, `.badge`, `.reaction`, `.comment`, `.event`, and so on). There is no CSS framework.
+- Branding (Banyan, M0 slice of `docs/product/banyan-spec.md`): brand tokens (`--bn-*`) with Notebook (light) and Slate (dark) themes, OS default plus a stored user choice (`src/client/theme.tsx`, theme toggle in the app header), Anek and Kavivanar web fonts from Google Fonts, the Banyan mark and lowercase wordmark, favicon and app icon from `public/brand/`, no all-caps labels, highlighter styling for birthdays, a neutral ring (not a candle) for remembrances, and the dot grid on the tree and empty states. Not yet done from M0: Tailwind v4, shadcn/ui, PullCord, the text-size setting UI (the `--bn-text-scale` hook exists), a kitchen-sink page, Playwright and axe in CI.
+- Visual design: a single dependency-free stylesheet, `src/client/styles.css`, defines brand tokens and semantic aliases (colors, radii, shadows, fonts) on `:root`, plus plain component classes (`.card`, `.btn`, `.input`, `.list`, `.tabs`, `.badge`, `.reaction`, `.comment`, `.event`, and so on). There is no CSS framework.
 - Shared UI building blocks live in `src/client/components/ui.tsx` (`Loading`, `Alert`, `EmptyState`, `ErrorState`, `PageHeader`, `Card`, `Field`, `RoleBadge`, `Avatar`, `CopyField`, `useBusy`, `timeAgo`, `relativeDay`, `shortDate`, `formatDate`, `lifeSpan`, inline icons). `components/PostCard.tsx` owns the feed post card (reactions, comments, edit/delete). `FamilyHeader` (`components/FamilyNav.tsx`) renders the family name, role badge, and Overview/Tree/Feed tabs. `components/families.tsx` holds `FamilyCard` and `CreateFamilyForm`.
 - Every page has loading, empty, and error states, and submit buttons show a pending state.
 - Member lists and feed posts show account display names. The friends page shows display names, lets you remove friends and cancel sent requests, and shows your own account ID with a copy button, because friend requests are still sent by account ID.
@@ -94,24 +100,25 @@ Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF
 
 ## Authentication
 
-- `src/lib/auth.ts` verifies RS256 JWTs against JWKS.
+- `src/lib/auth.ts` verifies RS256 JWTs against a remote JWKS (`jose` `createRemoteJWKSet`: cached for 10 minutes and refetched on an unknown `kid`, so key rotation needs no restart) or an inline `AUTH_JWKS`.
 - `src/lib/dev-auth.ts` generates a dev RSA key pair and signs tokens. Both the login route and `signDevToken` refuse to run unless `AUTH_DEV_MODE=true`.
 - `src/lib/hono.ts` extracts tokens from `Authorization` header and the `auth_token` cookie.
 
 ## Infrastructure and deployment
 
-- `wrangler.jsonc` declares the D1 `DB` binding, `MEDIA_BUCKET` R2 binding, the static assets binding (`dist/`, SPA fallback, `run_worker_first` for `/api/*`), and environment-specific staging/production overrides.
+- `wrangler.jsonc` declares the D1 `DB` binding, `MEDIA_BUCKET` R2 binding, the static assets binding (`dist/`, SPA fallback, `run_worker_first` for `/api/*`), and the `RATE_LIMITER` rate limit binding. Production `vars` point auth at Cloudflare Access.
 - The Worker bundle does not depend on Node-only modules beyond the `nodejs_compat` polyfill: token hashing uses Web Crypto (`crypto.subtle`/`getRandomValues`), and `dotenv` is imported only by the Node entry (`src/server/index.ts`). `node:async_hooks` is provided by `nodejs_compat`.
-- `.env.example` documents `DATABASE_URL`, `APP_BASE_URL`, `PORT`, auth settings including `AUTH_DEV_MODE`, and optional OIDC/S3-compatible storage variables.
+- `.env.example` documents `DATABASE_URL`, `APP_BASE_URL`, `PORT`, and auth settings including `AUTH_PROVIDER` and `AUTH_DEV_MODE`. The unused S3 `OBJECT_STORAGE_*` settings were removed.
 - `.github/workflows/ci.yml` runs format, lint, type-check, migration generation, migration drift check, migration application to a local SQLite file, `vite build` + `wrangler deploy --dry-run`, and tests.
 
 ## Tests
 
-- `tests/setup.ts`, `tests/helpers.ts`, `tests/family.test.ts`, `tests/authorization.test.ts`, `tests/hardening.test.ts`, `tests/engagement.test.ts`.
-- 36 integration tests across 4 files.
+- `tests/setup.ts`, `tests/helpers.ts`, `tests/family.test.ts`, `tests/authorization.test.ts`, `tests/hardening.test.ts`, `tests/engagement.test.ts`, `tests/cloudflare.test.ts`.
+- 50 tests across 5 files.
 - Covers family lifecycle, invitations, role authorization, cross-family isolation, tree cycles/self-edges, expired/duplicate invitations, and friendship-without-family-access.
 - Also covers Viewer posting/export, whole-family and depth-limited tree projections, tree query validation, friend requests to unknown accounts, friend display names, and mutual friend requests.
 - New hardening coverage: development sign-in is absent and cannot mint tokens when disabled, a single-use invitation accepts exactly one account (including two concurrent acceptances), person deletion soft-deletes and detaches relationships, ownership transfer swaps roles, exports are audited, and sensitive mutations write audit events.
+- Cloudflare coverage: Access header sign-in and forged-token rejection, display names from claims, `PATCH /me`, media upload/read/complete including non-member, friend, viewer and non-owner negative cases, metadata stripping for JPEG/PNG/WebP, and the rate limit binding.
 - New engagement coverage: feed author names, reaction counts, comment counts and current-account reaction; reaction toggling; same-second cursor pagination; upcoming birthdays and memorials.
 
 ## Current compatibility obligations
@@ -121,10 +128,11 @@ Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF
 
 ## Current technical debt
 
-- Rate limiting is in-memory and per-process, which is sufficient for a single-node deployment but not a multi-instance cluster or per-isolate Workers traffic.
-- The JWKS cache in `src/lib/auth.ts` never expires; signing-key rotation requires a cold start until a TTL/`kid` cache is added.
-- The development sign-in flow is not a production OIDC/OAuth provider; replacing `AUTH_JWKS_URI` with a real provider is still required for production onboarding.
-- Media upload completion still uses S3-compatible object storage configured via env vars, and the returned upload URL is a placeholder. The `MEDIA_BUCKET` R2 binding is declared in `wrangler.jsonc` but the media service has not been migrated to use the R2 binding directly.
+- Cloudflare's rate limit binding is per location and eventually consistent, so limits are approximate. The Node server's fallback limiter is still per process.
+- The Node server keeps uploaded media in memory, so local photos disappear on restart. `pnpm preview:cloudflare` uses a persistent local R2.
+- Replaced or removed profile photos stay in R2; nothing deletes orphaned media yet.
+- Images are not re-encoded on the server (Workers has no codec), so thumbnails and AVIF/WebP variants (spec §6.9) do not exist.
+- Access's free plan covers 50 users, and phone OTP is not available through Access.
 - No e2e browser tests yet.
 - Do not put `NODE_ENV` in `.env`: Vite reads it and `vite build` then bundles development React (about 514 kB instead of 254 kB). `.env.example` documents this.
 - Dependencies (Hono 4.4.6, drizzle-orm 0.30.9, drizzle-kit 0.21.4, Vite 5) are behind current stable releases; upgrade with the test suite as a guard.
@@ -133,12 +141,10 @@ Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF
 
 None required for v1.0. Optional follow-ups:
 
-- Replace dev sign-in with real OIDC/OAuth onboarding for production use.
+- Create the Access application, set `AUTH_AUDIENCE`, apply migrations to `banyan-db` and deploy (see `docs/operations/deployment.md`).
 - Add controls for existing API features not yet in the UI: removing relationships, ownership transfer, and family editing/deletion.
 - Add e2e tests (Playwright/Cypress).
-- Move rate limiting to Durable Objects or another shared store for multi-instance deployments.
-- Implement media uploads against the `MEDIA_BUCKET` R2 binding and return real presigned URLs.
+- Clean up orphaned media and add post-attachment uploads to the feed UI.
 - Add coverage thresholds to CI (migration drift is already checked).
-- Apply D1 migrations to the Cloudflare database and deploy with `pnpm deploy:cloudflare`.
 
 After any implementation work, update this file with factual status.

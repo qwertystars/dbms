@@ -23,6 +23,7 @@
     "docs/operations/observability.md",
     "docs/operations/runbooks/database-migration.md",
     "docs/operations/runbooks/family-data-access.md",
+    "docs/product/banyan-spec.md",
     "docs/product/product-spec.md",
     "docs/product/source-notes.md",
     "docs/quality/testing-strategy.md",

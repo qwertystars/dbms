@@ -12,6 +12,12 @@ Read:
 4. `architecture/backend-architecture.md`
 5. `contracts/data-model.md`
 
+## Banyan brand and next-phase spec
+
+Read:
+
+- `product/banyan-spec.md`: brand kit (tokens, type, logo, voice) and the next-phase product plan. Check `execution/current-state.md` for which parts exist and which conflicts are still open.
+
 ## Source interpretation and assumptions
 
 Read:

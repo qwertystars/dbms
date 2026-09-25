@@ -39,6 +39,9 @@ Within one family, an account has exactly one active membership.
 | Delete family                            |     Yes |     No |     No |
 | Create family post                       |     Yes |    Yes |    Yes |
 | Comment/react                            |     Yes |    Yes |    Yes |
+| Upload a person's profile photo          |     Yes |    Yes |     No |
+| Upload a post attachment                 |     Yes |    Yes |    Yes |
+| See the family's photos and attachments  |     Yes |    Yes |    Yes |
 
 The sketch gives Editor "add + edit". Removing an incorrect relationship is treated as tree editing, but deleting a person record remains Creator-only.
 
@@ -174,6 +177,12 @@ A media asset has exactly one owning account and an application-level purpose.
 ### RULE-MEDIA-02
 
 A client must not directly choose permanent object-storage keys.
+
+### RULE-MEDIA-04
+
+Family-owned media is family data. Creating it requires the membership shown in the permission
+matrix, and reading it requires an active membership of that family. Friendship never grants
+media access. Account avatars carry no family and are visible to any signed-in account.
 
 ### RULE-MEDIA-03
 

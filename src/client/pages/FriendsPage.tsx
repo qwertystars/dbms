@@ -15,7 +15,8 @@ import {
 } from "~/client/components/ui";
 
 export function FriendsPage() {
-  const { me } = useAuth();
+  const { me, refresh } = useAuth();
+  const [renaming, runRename] = useBusy();
   const [friends, setFriends] = useState<any[] | null>(null);
   const [requests, setRequests] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +37,19 @@ export function FriendsPage() {
   useEffect(() => {
     void load();
   }, []);
+
+  async function rename(e: SubmitEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const displayName = String(new FormData(e.currentTarget).get("displayName") ?? "").trim();
+    const res = await runRename(() => api("PATCH", "/api/v1/me", { displayName }));
+    if (!res) return;
+    if (res.status !== 200) {
+      setError(errorMessage(res, "Couldn't save your name."));
+      return;
+    }
+    await refresh();
+    setNotice("Your name was saved.");
+  }
 
   async function sendRequest(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -194,6 +208,23 @@ export function FriendsPage() {
           </div>
 
           <div className="stack">
+            <Card title="Your name" description="How your family and friends see you.">
+              <form onSubmit={rename} className="form">
+                <Field label="Display name">
+                  <input
+                    className="input"
+                    name="displayName"
+                    required
+                    maxLength={120}
+                    defaultValue={me?.displayName ?? ""}
+                    key={me?.displayName}
+                  />
+                </Field>
+                <button type="submit" className="btn btn-sm" disabled={renaming}>
+                  {renaming ? "Saving…" : "Save name"}
+                </button>
+              </form>
+            </Card>
             <Card title="Your account ID" description="Share this so others can add you.">
               {me?.id ? <CopyField value={me.id} label="Your account ID" /> : null}
             </Card>

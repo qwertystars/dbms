@@ -162,7 +162,12 @@ export function TreePage() {
         to={personLink(p.id)}
         className={`person-node${p.dateOfDeath ? " deceased" : ""}`}
       >
-        <Avatar name={p.name} size="sm" />
+        <Avatar
+          name={p.name}
+          size="sm"
+          mediaId={p.profileMediaId}
+          deceased={Boolean(p.dateOfDeath)}
+        />
         <div style={{ minWidth: 0 }}>
           <div className="person-node-name">{p.name}</div>
           {span && <div className="person-node-meta">{span}</div>}

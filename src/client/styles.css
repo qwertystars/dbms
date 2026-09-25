@@ -1,81 +1,115 @@
 /*
  * Global design system for the SPA.
- * Tokens live on :root (light) and are redefined for dark mode.
- * Components are plain class names; there is no CSS framework.
+ *
+ * Brand tokens (--bn-*) follow docs/product/banyan-spec.md §3.4 and are the
+ * source of truth. The theme follows the operating system unless the user
+ * picks one, which sets data-theme="notebook" or "slate" on <html>.
+ * Component classes read the semantic aliases below, never raw hex values.
  */
 
-:root {
+:root,
+:root[data-theme="notebook"] {
+  --bn-bg: #f3f4f7;
+  --bn-surface: #ffffff;
+  --bn-ink: #1d2a6b;
+  --bn-primary: #1d2a6b;
+  --bn-on-primary: #ffffff;
+  --bn-pencil: #5e6573;
+  --bn-pen: #c8262b;
+  --bn-on-pen: #ffffff;
+  --bn-pen-wash: #fce9e9;
+  --bn-highlight: #ffe45c;
+  --bn-on-highlight: #1d2a6b;
+  --bn-success: #1c7a4a;
+  --bn-rule: #d9dde5;
+  --bn-rule-strong: #8a93a6;
+  --bn-dot: #c3c9d4;
+  --bn-shadow: 0 1px 0 var(--bn-rule), 0 12px 32px rgb(29 42 107 / 0.12);
   color-scheme: light;
+}
 
-  --bg: #f7f5f0;
-  --surface: #ffffff;
-  --surface-muted: #f1eee7;
-  --border: #e3ded3;
-  --border-strong: #cfc8b9;
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="notebook"]) {
+    --bn-bg: #1b2421;
+    --bn-surface: #222d29;
+    --bn-ink: #eef0ea;
+    --bn-primary: #afc0ff;
+    --bn-on-primary: #141b3d;
+    --bn-pencil: #a7b1ac;
+    --bn-pen: #ff7a70;
+    --bn-on-pen: #1b2421;
+    --bn-pen-wash: #3a2624;
+    --bn-highlight: #4a4218;
+    --bn-on-highlight: #ffe45c;
+    --bn-success: #6fd3a0;
+    --bn-rule: #34423d;
+    --bn-rule-strong: #6b7a74;
+    --bn-dot: #3f4e48;
+    --bn-shadow: 0 1px 0 var(--bn-rule), 0 12px 32px rgb(0 0 0 / 0.35);
+    color-scheme: dark;
+  }
+}
 
-  --text: #1f2421;
-  --text-muted: #5f675f;
-  --text-subtle: #8a918a;
+:root[data-theme="slate"] {
+  --bn-bg: #1b2421;
+  --bn-surface: #222d29;
+  --bn-ink: #eef0ea;
+  --bn-primary: #afc0ff;
+  --bn-on-primary: #141b3d;
+  --bn-pencil: #a7b1ac;
+  --bn-pen: #ff7a70;
+  --bn-on-pen: #1b2421;
+  --bn-pen-wash: #3a2624;
+  --bn-highlight: #4a4218;
+  --bn-on-highlight: #ffe45c;
+  --bn-success: #6fd3a0;
+  --bn-rule: #34423d;
+  --bn-rule-strong: #6b7a74;
+  --bn-dot: #3f4e48;
+  --bn-shadow: 0 1px 0 var(--bn-rule), 0 12px 32px rgb(0 0 0 / 0.35);
+  color-scheme: dark;
+}
 
-  --primary: #2e6b4f;
-  --primary-hover: #245a41;
-  --primary-soft: #e3efe8;
-  --primary-text: #ffffff;
+/* Semantic aliases used by component classes. Mapped once onto brand tokens. */
+:root {
+  --bg: var(--bn-bg);
+  --surface: var(--bn-surface);
+  --surface-muted: var(--bn-bg);
+  --border: var(--bn-rule);
+  --border-strong: var(--bn-rule-strong);
 
-  --accent: #b8662f;
-  --accent-soft: #f7e7da;
+  --text: var(--bn-ink);
+  --text-muted: var(--bn-pencil);
+  --text-subtle: var(--bn-pencil);
 
-  --danger: #b3261e;
-  --danger-soft: #fbe9e7;
-  --success: #2e6b4f;
-  --success-soft: #e3efe8;
+  --primary: var(--bn-primary);
+  --primary-hover: color-mix(in srgb, var(--bn-primary) 86%, var(--bn-ink));
+  --primary-soft: color-mix(in srgb, var(--bn-primary) 10%, var(--bn-surface));
+  --primary-text: var(--bn-on-primary);
 
-  --focus: #3b82f6;
+  --danger: var(--bn-pen);
+  --danger-soft: var(--bn-pen-wash);
+  --success: var(--bn-success);
+  --success-soft: color-mix(in srgb, var(--bn-success) 12%, var(--bn-surface));
+
+  --focus: var(--bn-primary);
 
   --radius-sm: 6px;
   --radius: 10px;
   --radius-lg: 16px;
-  --shadow-sm: 0 1px 2px rgb(31 36 33 / 0.06);
-  --shadow: 0 1px 3px rgb(31 36 33 / 0.08), 0 4px 12px rgb(31 36 33 / 0.04);
+  --shadow-sm: 0 1px 0 var(--bn-rule);
+  --shadow: var(--bn-shadow);
 
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
-    sans-serif;
-  --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", serif;
+  /* Anek's per-script families share metrics, so Tamil and Devanagari names sit beside Latin ones.
+     Google Fonts serves each script by unicode-range, so a script downloads only when it appears. */
+  --font-sans: "Anek Latin", "Anek Tamil", "Anek Devanagari", system-ui, -apple-system, "Segoe UI",
+    Roboto, sans-serif;
+  --font-hand: "Kavivanar", "Anek Latin", cursive;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
+  --dot-grid: radial-gradient(circle, var(--bn-dot) 0.7px, transparent 0.7px) 0 0 / 24px 24px;
+
   --container: 1080px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-
-    --bg: #141715;
-    --surface: #1c201d;
-    --surface-muted: #232824;
-    --border: #2e3430;
-    --border-strong: #3d4540;
-
-    --text: #e8ebe8;
-    --text-muted: #a3aba4;
-    --text-subtle: #7a827b;
-
-    --primary: #5fb58a;
-    --primary-hover: #74c49b;
-    --primary-soft: #1f3329;
-    --primary-text: #0f1a14;
-
-    --accent: #e0935c;
-    --accent-soft: #3a2a1f;
-
-    --danger: #f2877e;
-    --danger-soft: #3a1f1d;
-    --success: #5fb58a;
-    --success-soft: #1f3329;
-
-    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.3);
-    --shadow: 0 1px 3px rgb(0 0 0 / 0.35), 0 4px 12px rgb(0 0 0 / 0.2);
-  }
 }
 
 /* ---------- Base ---------- */
@@ -88,6 +122,8 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+  /* The text-size setting (100, 115 or 130 percent) scales the whole ramp. */
+  font-size: calc(100% * var(--bn-text-scale, 1));
 }
 
 body {
@@ -95,8 +131,8 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-sans);
-  font-size: 15px;
-  line-height: 1.55;
+  font-size: 1rem;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -110,9 +146,23 @@ h3 {
 }
 
 h1 {
-  font-family: var(--font-serif);
-  font-size: 1.9rem;
-  font-weight: 600;
+  font-size: 1.875rem;
+  line-height: 1.2;
+  font-weight: 700;
+  font-stretch: 112.5%;
+}
+
+/* Indian scripts need taller lines for their vowel signs. */
+:lang(ta),
+:lang(hi),
+:lang(bn),
+:lang(te),
+:lang(kn),
+:lang(ml),
+:lang(gu),
+:lang(pa),
+:lang(or) {
+  line-height: 1.65;
 }
 
 h2 {
@@ -190,9 +240,6 @@ code {
   align-items: center;
   gap: 10px;
   color: var(--text);
-  font-family: var(--font-serif);
-  font-weight: 600;
-  font-size: 1.1rem;
   white-space: nowrap;
 }
 
@@ -201,13 +248,37 @@ code {
 }
 
 .brand-mark {
-  display: grid;
+  display: block;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+/* Wordmark: lowercase Anek Latin, weight 800, 125% width, in ink. */
+.brand-name {
+  font-size: 1.25rem;
+  font-weight: 800;
+  font-stretch: 125%;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
+.theme-toggle {
+  display: inline-grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  background: var(--primary);
-  color: var(--primary-text);
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.theme-toggle:hover {
+  background: var(--surface-muted);
+  color: var(--text);
 }
 
 .mainnav {
@@ -331,10 +402,8 @@ code {
 }
 
 .eyebrow {
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--text-subtle);
 }
 
@@ -466,9 +535,16 @@ a.list-item:hover {
   text-decoration: none;
 }
 
-.btn:disabled {
+.btn:disabled,
+.btn.is-disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* A file input hidden inside a label button still shows keyboard focus. */
+.btn:has(input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .btn-primary {
@@ -664,16 +740,14 @@ details.disclosure[open] > summary {
   border-radius: 999px;
   font-size: 0.72rem;
   font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
   white-space: nowrap;
   background: var(--surface-muted);
   color: var(--text-muted);
 }
 
 .badge-creator {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--primary);
+  color: var(--primary-text);
 }
 
 .badge-editor {
@@ -687,11 +761,32 @@ details.disclosure[open] > summary {
   flex-shrink: 0;
   width: 36px;
   height: 36px;
+  overflow: hidden;
   border-radius: 50%;
   font-weight: 600;
   font-size: 0.85rem;
-  color: #fff;
+  background: var(--bn-primary);
+  color: var(--bn-on-primary);
   user-select: none;
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-deceased {
+  box-shadow:
+    0 0 0 2px var(--bn-surface),
+    0 0 0 4px var(--bn-pencil);
+}
+
+.photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .avatar-sm {
@@ -780,6 +875,8 @@ details.disclosure[open] > summary {
   padding: 32px 20px;
   text-align: center;
   color: var(--text-muted);
+  background: var(--dot-grid);
+  border-radius: var(--radius-lg);
 }
 
 .empty-title {
@@ -903,9 +1000,8 @@ details.disclosure[open] > summary {
 }
 
 .family-card h3 {
-  font-family: var(--font-serif);
   font-size: 1.15rem;
-  font-weight: 600;
+  font-weight: 650;
 }
 
 .family-card p {
@@ -940,10 +1036,8 @@ details.disclosure[open] > summary {
 }
 
 .detail-list dt {
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
   color: var(--text-subtle);
 }
 
@@ -963,6 +1057,10 @@ details.disclosure[open] > summary {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--dot-grid), var(--surface);
 }
 
 .generation {
@@ -1351,8 +1449,8 @@ a.person-node:hover {
 }
 
 .event-birthday {
-  background: var(--primary-soft);
-  color: var(--primary);
+  background: var(--bn-highlight);
+  color: var(--bn-on-highlight);
 }
 
 .event-memorial {

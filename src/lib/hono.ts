@@ -1,13 +1,21 @@
 import { Hono } from "hono";
 import type { RequestContext } from "~/lib/context";
 import { getOrCreateAccount } from "~/modules/accounts/service";
-import { verifyAccessToken } from "~/lib/auth";
+import { displayNameFromClaims, verifyAccessToken } from "~/lib/auth";
+import { localObjectStore, type ObjectStore } from "~/lib/object-store";
 import { createDb } from "~/lib/db";
 import { env } from "~/lib/env";
 import type { D1Database } from "@cloudflare/workers-types";
 import { AppError } from "~/lib/errors";
 import { log } from "~/lib/logger";
 import { getRequestId, runWithContext } from "~/lib/context";
+
+// Cloudflare's Workers rate limiting binding (RATE_LIMITER in wrangler.jsonc).
+// Its counters are shared across isolates in a location, unlike the in-memory
+// fallback used by the Node server and tests.
+interface RateLimiterBinding {
+  limit(options: { key: string }): Promise<{ success: boolean }>;
+}
 
 interface RateLimitWindow {
   count: number;
@@ -44,7 +52,8 @@ app.use(async (c, next) => {
     );
   }
   const requestDb = await createDb(dbInput as any);
-  const ctx: RequestContext = { db: requestDb, requestId, requestStart };
+  const objects = ((c.env as any)?.MEDIA_BUCKET as ObjectStore | undefined) ?? localObjectStore;
+  const ctx: RequestContext = { db: requestDb, requestId, requestStart, objects };
   c.set("ctx", ctx);
   c.header("X-Content-Type-Options", "nosniff");
   c.header("X-Frame-Options", "DENY");
@@ -54,6 +63,9 @@ app.use(async (c, next) => {
 });
 
 function extractToken(c: any): string | undefined {
+  // Cloudflare Access puts its signed identity token on every request it lets through.
+  const accessToken = c.req.header("cf-access-jwt-assertion");
+  if (accessToken) return accessToken;
   const authHeader = c.req.header("authorization");
   if (authHeader && authHeader.startsWith("Bearer ")) {
     return authHeader.slice(7);
@@ -73,8 +85,7 @@ app.use(async (c, next) => {
       const payload = await verifyAccessToken(token);
       const subject = payload.sub;
       if (!subject) throw new Error("Missing subject");
-      const name = typeof payload.name === "string" ? payload.name : subject;
-      const account = await getOrCreateAccount(subject, name);
+      const account = await getOrCreateAccount(subject, displayNameFromClaims(payload));
       c.get("ctx").account = account;
     } catch (e) {
       // intentionally ignored; route handlers enforce auth
@@ -84,8 +95,21 @@ app.use(async (c, next) => {
 });
 
 app.use(async (c, next) => {
+  const actor =
+    c.get("ctx").account?.authSubject ||
+    c.req.header("cf-connecting-ip") ||
+    c.req.header("x-forwarded-for") ||
+    "anonymous";
+  const limiter = (c.env as any)?.RATE_LIMITER as RateLimiterBinding | undefined;
+  if (limiter) {
+    const { success } = await limiter.limit({ key: actor });
+    if (!success) {
+      return c.json({ error: { code: "RATE_LIMITED", message: "Too many requests." } }, 429);
+    }
+    return next();
+  }
+
   const now = Date.now();
-  const actor = c.get("ctx").account?.authSubject || c.req.header("x-forwarded-for") || "anonymous";
   const windowStart = Math.floor(now / RATE_LIMIT_WINDOW_MS) * RATE_LIMIT_WINDOW_MS;
   const key = `${actor}:${windowStart}`;
 

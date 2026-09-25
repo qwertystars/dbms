@@ -88,7 +88,11 @@ Do not optimistically mutate ancestry edges before server validation because cyc
 
 ## Visual design system
 
-- All styling lives in `src/client/styles.css`: design tokens on `:root`, a dark-mode token override under `prefers-color-scheme: dark`, and plain component classes. Do not add inline color values; use the tokens.
+- The brand is Banyan (`docs/product/banyan-spec.md` §3). Brand tokens (`--bn-*`) in `src/client/styles.css` are the colour source of truth. Two themes: Notebook (light) and Slate (dark). The theme follows the OS unless the user picks one, which sets `data-theme="notebook"` or `"slate"` on `<html>` (`src/client/theme.tsx`; an inline script in `index.html` applies the stored choice before first paint).
+- Component classes read semantic aliases (`--bg`, `--text`, `--primary`, `--danger`, ...) that are mapped once onto `--bn-*`. Do not add raw hex values in components; use the tokens.
+- Colour jobs: ink is confirmed fact and primary action; pencil is secondary text and approximate facts; red pen (`--bn-pen`) is only for "look here" and errors; highlighter (`--bn-highlight`) is only for celebrations and never for remembrance or loss. The dot grid (`--dot-grid`) appears only on the tree canvas and empty states.
+- Type is Anek (Latin, Tamil, Devanagari) from Google Fonts, with Kavivanar (`--font-hand`) reserved for short red-pen annotations. No all-caps labels. Indian-script elements get taller line heights via `:lang(...)`.
+- Brand files live in `public/brand/`. The header mark is drawn inline (`BanyanMark` in `components/AppLayout.tsx`) with tokens so it becomes the chalk mark in Slate.
 - Reusable React pieces live in `src/client/components/ui.tsx`. Prefer extending these over one-off markup.
 - Every data-loading page renders `Loading` while fetching, `ErrorState` when its primary data fails, and `EmptyState` for empty lists.
 - Layouts must work at phone width (360px) without horizontal scrolling.

@@ -1,6 +1,6 @@
-# Family Social Network
+# Banyan
 
-Working title for a private social application centered on family trees, family-member profiles, family-scoped posts, and account-to-account friendships.
+Every branch has roots. Banyan (working name) is a private social application centered on family trees, family-member profiles, family-scoped posts, and account-to-account friendships.
 
 ## Project status
 
@@ -19,14 +19,18 @@ Open http://localhost:5173 and use the development sign-in (any user ID works). 
 
 ## Running on Cloudflare locally
 
-`wrangler dev` runs the real Workers runtime with local D1 and R2 bindings, so this is the closest thing to production:
+`wrangler dev` runs the real Workers runtime with local D1, R2 and rate limit bindings, so this is the closest thing to production:
 
 ```bash
 pnpm db:apply:local      # apply migrations to the local D1 database
 pnpm preview:cloudflare  # vite build + wrangler dev on http://localhost:8787
 ```
 
-The preview script enables the development sign-in for local use. For a deployed Worker, add a real OIDC provider (`AUTH_JWKS_URI`) and leave `AUTH_DEV_MODE` unset. To deploy for real, create the D1 database and R2 bucket, put their IDs in `wrangler.jsonc`, then run `pnpm deploy:cloudflare`. Full steps live in `docs/operations/deployment.md`.
+The preview script enables the development sign-in for local use.
+
+## Production
+
+Banyan runs as the `banyan` Worker at `https://banyan.srijan-guchhait.workers.dev`, with D1 (`banyan-db`), R2 (`banyan-media`) and Cloudflare Access for sign-in (email one-time PIN or Google). Setup and deploy steps live in `docs/operations/deployment.md`.
 
 Checks: `pnpm format:check && pnpm lint && pnpm type-check && pnpm test`.
 

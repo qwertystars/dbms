@@ -49,7 +49,7 @@ export function HomePage() {
       </header>
       <main className="container">
         <section className="hero">
-          <span className="eyebrow">Family Social Network</span>
+          <span className="eyebrow">Every branch has roots.</span>
           <h1>A private home for your family&rsquo;s story.</h1>
           <p>
             Build your family tree, keep profiles for every relative, and share updates in a space

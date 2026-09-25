@@ -106,6 +106,12 @@ These properties must remain true regardless of UI behavior.
 
 **Statement:** Every application media object must have a database metadata record tying it to an owner and purpose before it becomes referenced by visible content.
 
+## INV-MEDIA-02 — Family media is never served outside the family
+
+**Statement:** Media with a `familyId` is returned only to its owner or an active member of that family.
+
+**Enforced by:** `getContent` in `src/modules/media/service.ts`; tests in `tests/cloudflare.test.ts` (non-member and friend both get `404`).
+
 ## INV-AUDIT-01 — Sensitive structural changes are traceable
 
 **Statement:** Role, ownership, destructive person/tree, and family-deletion operations must produce an audit event on success.
