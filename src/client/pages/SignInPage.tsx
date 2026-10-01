@@ -1,42 +1,66 @@
-import { useEffect, useState } from "react";
+import { SignIn, SignUp } from "@clerk/react";
 import { Navigate, useSearchParams } from "react-router-dom";
-import { api } from "~/client/api";
 import { useAuth } from "~/client/auth";
 import { Brand } from "~/client/components/AppLayout";
-import { Field, Loading } from "~/client/components/ui";
+import { Field } from "~/client/components/ui";
+import { useAuthConfig, useSession } from "~/client/session";
 
-interface AuthConfig {
-  provider: "oidc" | "cloudflare-access";
-  devSignIn: boolean;
+// Only allow same-site paths, mirroring the server-side check.
+function useReturnTo() {
+  const [searchParams] = useSearchParams();
+  const requested = searchParams.get("returnTo") || "";
+  return requested.startsWith("/") && !requested.startsWith("//") ? requested : "/app";
 }
 
 export function SignInPage() {
-  const { status } = useAuth();
-  const [searchParams] = useSearchParams();
-  const [config, setConfig] = useState<AuthConfig | null>(null);
-  const requested = searchParams.get("returnTo") || "";
-  // Only allow same-site paths, mirroring the server-side check.
-  const returnTo = requested.startsWith("/") && !requested.startsWith("//") ? requested : "/app";
+  return <AuthPage mode="sign-in" />;
+}
 
-  useEffect(() => {
-    void api("GET", "/api/auth/config").then((result) =>
-      setConfig(result.status === 200 ? result.body : { provider: "oidc", devSignIn: false }),
-    );
-  }, []);
+export function SignUpPage() {
+  return <AuthPage mode="sign-up" />;
+}
+
+function AuthPage({ mode }: { mode: "sign-in" | "sign-up" }) {
+  const { status } = useAuth();
+  const config = useAuthConfig();
+  const session = useSession();
+  const returnTo = useReturnTo();
 
   if (status === "authed") return <Navigate to={returnTo} replace />;
+
+  if (session.mode === "clerk") {
+    const query = `?returnTo=${encodeURIComponent(returnTo)}`;
+    return (
+      <main className="center-screen">
+        <div className="auth-card auth-card-clerk">
+          <Brand />
+          {mode === "sign-in" ? (
+            <SignIn
+              routing="hash"
+              signUpUrl={`/sign-up${query}`}
+              forceRedirectUrl={returnTo}
+              signUpForceRedirectUrl={returnTo}
+            />
+          ) : (
+            <SignUp
+              routing="hash"
+              signInUrl={`/sign-in${query}`}
+              forceRedirectUrl={returnTo}
+              signInForceRedirectUrl={returnTo}
+            />
+          )}
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="center-screen">
       <div className="auth-card">
         <Brand />
         <div className="card card-body stack">
-          {!config ? (
-            <Loading />
-          ) : config.devSignIn ? (
+          {config.devSignIn ? (
             <DevSignIn returnTo={returnTo} />
-          ) : config.provider === "cloudflare-access" ? (
-            <AccessSignIn returnTo={returnTo} />
           ) : (
             <div>
               <h1 style={{ fontSize: "1.5rem" }}>Sign-in isn&rsquo;t set up</h1>
@@ -49,33 +73,6 @@ export function SignInPage() {
         </div>
       </div>
     </main>
-  );
-}
-
-// Cloudflare Access signs people in before the app loads, so reaching this page
-// means the session ended or the app could not confirm it. Loading the app again
-// sends the browser back through Access.
-function AccessSignIn({ returnTo }: { returnTo: string }) {
-  return (
-    <>
-      <div>
-        <h1 style={{ fontSize: "1.5rem" }}>Sign in</h1>
-        <p className="muted" style={{ marginTop: 6 }}>
-          We&rsquo;ll email you a one-time code. No password needed.
-        </p>
-      </div>
-      <a className="btn btn-primary btn-block" href={returnTo}>
-        Continue with email
-      </a>
-      <form action="/api/auth/logout" method="post">
-        <p className="subtle">
-          Still stuck here after signing in?{" "}
-          <button type="submit" className="btn btn-ghost btn-sm">
-            Sign out and try again
-          </button>
-        </p>
-      </form>
-    </>
   );
 }
 

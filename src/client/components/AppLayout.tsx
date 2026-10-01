@@ -1,6 +1,7 @@
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "~/client/auth";
 import { Avatar, Icon } from "~/client/components/ui";
+import { useSession } from "~/client/session";
 import { useTheme } from "~/client/theme";
 
 // The kinship glyph from public/brand/banyan-mark.svg, drawn with theme tokens so the
@@ -43,6 +44,7 @@ export function ThemeToggle() {
 
 export function AppLayout() {
   const { me } = useAuth();
+  const { signOut } = useSession();
   return (
     <>
       <header className="topbar">
@@ -59,11 +61,9 @@ export function AppLayout() {
             <ThemeToggle />
             <Avatar name={me?.displayName} size="sm" />
             <span className="topbar-user-name">{me?.displayName}</span>
-            <form action="/api/auth/logout" method="post">
-              <button type="submit" className="btn btn-ghost btn-sm">
-                Sign out
-              </button>
-            </form>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => void signOut()}>
+              Sign out
+            </button>
           </div>
         </div>
       </header>

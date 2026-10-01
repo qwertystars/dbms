@@ -27,6 +27,13 @@ export async function getOrCreateAccount(
   return mapAccount(raced);
 }
 
+export async function findAccountBySubject(authSubject: string): Promise<Account | undefined> {
+  const row = await db.query.accounts.findFirst({
+    where: eq(accounts.authSubject, authSubject),
+  });
+  return row ? mapAccount(row) : undefined;
+}
+
 export async function getAccountById(id: string): Promise<Account | undefined> {
   const row = await db.query.accounts.findFirst({
     where: eq(accounts.id, id),

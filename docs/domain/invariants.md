@@ -110,7 +110,7 @@ These properties must remain true regardless of UI behavior.
 
 **Statement:** Media with a `familyId` is returned only to its owner or an active member of that family.
 
-**Enforced by:** `getContent` in `src/modules/media/service.ts`; tests in `tests/cloudflare.test.ts` (non-member and friend both get `404`).
+**Enforced by:** `getContent` in `src/modules/media/service.ts`; tests in `tests/production.test.ts` (non-member and friend both get `404`).
 
 ## INV-AUDIT-01 — Sensitive structural changes are traceable
 

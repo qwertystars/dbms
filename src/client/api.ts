@@ -3,12 +3,25 @@ export interface ApiResult {
   body: any;
 }
 
+type TokenGetter = () => Promise<string | null>;
+let sessionTokenGetter: TokenGetter | null = null;
+
+// Set by the Clerk session bridge (src/client/session.tsx) while signed in.
+export function setSessionTokenGetter(getter: TokenGetter | null) {
+  sessionTokenGetter = getter;
+}
+
+async function authHeaders(): Promise<Record<string, string>> {
+  const token = sessionTokenGetter ? await sessionTokenGetter().catch(() => null) : null;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export async function api(
   method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE",
   path: string,
   body?: unknown,
 ): Promise<ApiResult> {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = await authHeaders();
   if (body !== undefined) headers["Content-Type"] = "application/json";
   let response: Response;
   try {
@@ -17,7 +30,6 @@ export async function api(
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
       credentials: "same-origin",
-      redirect: "manual",
     });
   } catch {
     // Network failure: report it like an API error so pages show a message
@@ -27,16 +39,8 @@ export async function api(
       body: { error: { message: "Could not reach the server. Check your connection." } },
     };
   }
-  if (response.type === "opaqueredirect") return sessionEnded();
   const json = await response.json().catch(() => ({}));
   return { status: response.status, body: json };
-}
-
-// The API never redirects, so a redirect means Cloudflare Access wants the user
-// to sign in again. A full page load lets Access show its sign-in screen.
-function sessionEnded(): ApiResult {
-  window.location.reload();
-  return { status: 401, body: { error: { message: "Your session has ended. Sign in again." } } };
 }
 
 export type UploadPurpose = "ACCOUNT_AVATAR" | "PERSON_PROFILE" | "POST_ATTACHMENT";
@@ -85,16 +89,12 @@ export async function uploadImage(
   try {
     response = await fetch(intent.body.uploadUrl, {
       method: "PUT",
-      headers: { "Content-Type": blob.type },
+      headers: { ...(await authHeaders()), "Content-Type": blob.type },
       body: blob,
       credentials: "same-origin",
-      redirect: "manual",
     });
   } catch {
     return { ok: false, message: "Could not reach the server. Check your connection." };
-  }
-  if (response.type === "opaqueredirect") {
-    return { ok: false, message: sessionEnded().body.error.message };
   }
   if (!response.ok) {
     const json: any = await response.json().catch(() => ({}));

@@ -24,7 +24,7 @@ The frontend is a Vite + React single-page application and the backend is a stan
 - Foreign-key enforcement is enabled on the local libsql client (`PRAGMA foreign_keys = ON`) to match D1, which enforces foreign keys on every query.
 - Environment validation with `dotenv`, including empty-string-to-undefined handling for optional values.
 - Hono-based REST API under `/api/v1` with request context, structured logging, security headers, and rate limiting.
-- Account provisioning from the token subject. Production sign-in is Cloudflare Access (email one-time PIN or Google): the API reads `Cf-Access-Jwt-Assertion` and verifies it against the Access team JWKS, issuer and audience (ADR-004). New accounts are named from the token's `name`, else the email's local part; `PATCH /me` and a "Your name" card on the Friends page let people rename themselves.
+- Account provisioning from the token subject. Production sign-in is Clerk (ADR-004): `/sign-in` and `/sign-up` render Clerk's components when `GET /api/auth/config` reports Clerk, and the browser sends Clerk's session token as a Bearer header (the `__session` cookie covers image requests). The Worker verifies tokens with `jose` against the Clerk JWKS and issuer derived from `CLERK_PUBLISHABLE_KEY`, checks `azp` against the app's origin and rejects pending sessions. New accounts are named from Clerk's Backend API (`CLERK_SECRET_KEY`), else from the token claims, never with a full email; `PATCH /me` and a "Your name" card on the Friends page let people rename themselves.
 - Development-only cookie sign-in mounted only when `AUTH_DEV_MODE=true` (`pnpm dev:api` sets it). The route is absent otherwise, so production Workers builds cannot mint trusted tokens.
 - Cookie and Bearer token authentication for both browser UI and API clients.
 - Family CRUD, member role management (CREATOR/EDITOR/VIEWER), invitations, ownership transfer, and soft delete.
@@ -59,7 +59,7 @@ The frontend is a Vite + React single-page application and the backend is a stan
 ## Partially implemented capabilities
 
 - Post attachments and account avatars can be uploaded through the API, but the UI only uploads person profile photos.
-- Cloudflare deployment: the D1 database `banyan-db` and R2 bucket `banyan-media` exist on the Cloudflare account (created 2026-09-23). The Access application has not been created, `AUTH_AUDIENCE` in `wrangler.jsonc` is still a placeholder, migrations have not been applied to the remote database, and the Worker has not been deployed.
+- Cloudflare deployment: the D1 database `banyan-db` and R2 bucket `banyan-media` exist on the Cloudflare account (created 2026-09-23). No Clerk application is connected yet: `CLERK_PUBLISHABLE_KEY` in `wrangler.jsonc` is a placeholder and the `CLERK_SECRET_KEY` secret is not set. The Clerk sign-in UI has not been tried against a real Clerk instance or in a browser. Also, migrations have not been applied to the remote database, and the Worker has not been deployed.
 
 Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF export, external import, AI) remain intentionally out of scope per the plan.
 
@@ -106,19 +106,19 @@ Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF
 
 ## Infrastructure and deployment
 
-- `wrangler.jsonc` declares the D1 `DB` binding, `MEDIA_BUCKET` R2 binding, the static assets binding (`dist/`, SPA fallback, `run_worker_first` for `/api/*`), and the `RATE_LIMITER` rate limit binding. Production `vars` point auth at Cloudflare Access.
+- `wrangler.jsonc` declares the D1 `DB` binding, `MEDIA_BUCKET` R2 binding, the static assets binding (`dist/`, SPA fallback, `run_worker_first` for `/api/*`), and the `RATE_LIMITER` rate limit binding. Production `vars` select Clerk.
 - The Worker bundle does not depend on Node-only modules beyond the `nodejs_compat` polyfill: token hashing uses Web Crypto (`crypto.subtle`/`getRandomValues`), and `dotenv` is imported only by the Node entry (`src/server/index.ts`). `node:async_hooks` is provided by `nodejs_compat`.
 - `.env.example` documents `DATABASE_URL`, `APP_BASE_URL`, `PORT`, and auth settings including `AUTH_PROVIDER` and `AUTH_DEV_MODE`. The unused S3 `OBJECT_STORAGE_*` settings were removed.
 - `.github/workflows/ci.yml` runs format, lint, type-check, migration generation, migration drift check, migration application to a local SQLite file, `vite build` + `wrangler deploy --dry-run`, and tests.
 
 ## Tests
 
-- `tests/setup.ts`, `tests/helpers.ts`, `tests/family.test.ts`, `tests/authorization.test.ts`, `tests/hardening.test.ts`, `tests/engagement.test.ts`, `tests/cloudflare.test.ts`.
-- 50 tests across 5 files.
+- `tests/setup.ts`, `tests/helpers.ts`, `tests/family.test.ts`, `tests/authorization.test.ts`, `tests/hardening.test.ts`, `tests/engagement.test.ts`, `tests/production.test.ts`.
+- 54 tests across 5 files.
 - Covers family lifecycle, invitations, role authorization, cross-family isolation, tree cycles/self-edges, expired/duplicate invitations, and friendship-without-family-access.
 - Also covers Viewer posting/export, whole-family and depth-limited tree projections, tree query validation, friend requests to unknown accounts, friend display names, and mutual friend requests.
 - New hardening coverage: development sign-in is absent and cannot mint tokens when disabled, a single-use invitation accepts exactly one account (including two concurrent acceptances), person deletion soft-deletes and detaches relationships, ownership transfer swaps roles, exports are audited, and sensitive mutations write audit events.
-- Cloudflare coverage: Access header sign-in and forged-token rejection, display names from claims, `PATCH /me`, media upload/read/complete including non-member, friend, viewer and non-owner negative cases, metadata stripping for JPEG/PNG/WebP, and the rate limit binding.
+- Production coverage: Clerk `__session` cookie sign-in, pending-session and forged-token rejection, `azp` checks, publishable-key decoding, display names from Clerk users and claims, the auth config route, `PATCH /me`, media upload/read/complete including non-member, friend, viewer and non-owner negative cases, metadata stripping for JPEG/PNG/WebP, and the rate limit binding.
 - New engagement coverage: feed author names, reaction counts, comment counts and current-account reaction; reaction toggling; same-second cursor pagination; upcoming birthdays and memorials.
 
 ## Current compatibility obligations
@@ -132,7 +132,7 @@ Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF
 - The Node server keeps uploaded media in memory, so local photos disappear on restart. `pnpm preview:cloudflare` uses a persistent local R2.
 - Replaced or removed profile photos stay in R2; nothing deletes orphaned media yet.
 - Images are not re-encoded on the server (Workers has no codec), so thumbnails and AVIF/WebP variants (spec §6.9) do not exist.
-- Access's free plan covers 50 users, and phone OTP is not available through Access.
+- A Clerk development instance shows a development banner; a production Clerk instance needs a custom domain instead of `workers.dev`.
 - No e2e browser tests yet.
 - Do not put `NODE_ENV` in `.env`: Vite reads it and `vite build` then bundles development React (about 514 kB instead of 254 kB). `.env.example` documents this.
 - Dependencies (Hono 4.4.6, drizzle-orm 0.30.9, drizzle-kit 0.21.4, Vite 5) are behind current stable releases; upgrade with the test suite as a guard.
@@ -141,7 +141,7 @@ Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF
 
 None required for v1.0. Optional follow-ups:
 
-- Create the Access application, set `AUTH_AUDIENCE`, apply migrations to `banyan-db` and deploy (see `docs/operations/deployment.md`).
+- Connect a Clerk application (publishable key and secret), apply migrations to `banyan-db` and deploy (see `docs/operations/deployment.md`).
 - Add controls for existing API features not yet in the UI: removing relationships, ownership transfer, and family editing/deletion.
 - Add e2e tests (Playwright/Cypress).
 - Clean up orphaned media and add post-attachment uploads to the feed UI.

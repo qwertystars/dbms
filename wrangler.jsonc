@@ -4,9 +4,8 @@
   "main": "src/worker.ts",
   "compatibility_date": "2026-09-05",
   "compatibility_flags": ["nodejs_compat"],
-  // Cloudflare Access protects banyan.srijan-guchhait.workers.dev. Version
-  // preview URLs are a different hostname that Access does not cover, so they
-  // stay off. The API verifies the Access token itself either way.
+  // Version preview URLs use another origin, which Clerk tokens (azp) are not
+  // minted for, so they stay off.
   "workers_dev": true,
   "preview_urls": false,
   "assets": {
@@ -21,12 +20,11 @@
   },
   "vars": {
     "APP_BASE_URL": "https://banyan.srijan-guchhait.workers.dev",
-    // Sign-in is Cloudflare Access (email one-time PIN or Google) for the
-    // qwertystars team. AUTH_AUDIENCE is the Access application's AUD tag.
-    "AUTH_PROVIDER": "cloudflare-access",
-    "AUTH_ISSUER": "https://qwertystars.cloudflareaccess.com",
-    "AUTH_JWKS_URI": "https://qwertystars.cloudflareaccess.com/cdn-cgi/access/certs",
-    "AUTH_AUDIENCE": "SET_TO_ACCESS_APPLICATION_AUD_TAG",
+    // Sign-in is Clerk. The issuer and JWKS URL are derived from the
+    // publishable key, which is public. CLERK_SECRET_KEY is a Worker secret
+    // (wrangler secret put CLERK_SECRET_KEY), used to look up new users' names.
+    "AUTH_PROVIDER": "clerk",
+    "CLERK_PUBLISHABLE_KEY": "pk_test_SET_FROM_CLERK_DASHBOARD",
   },
   "d1_databases": [
     {

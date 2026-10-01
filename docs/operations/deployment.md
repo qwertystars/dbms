@@ -7,14 +7,14 @@ Browser
   |
 HTTPS
   |
-Cloudflare Access (email one-time PIN or Google, team qwertystars)
+Cloudflare Worker "banyan" (Hono API + Vite SPA static assets)  <-- verifies Clerk tokens
   |
-Cloudflare Worker "banyan" (Hono API + Vite SPA static assets)
-  |
-  |------------------|------------------|
-Cloudflare D1      Cloudflare R2      Workers rate limiting
-(banyan-db)        (banyan-media)     (RATE_LIMITER)
+  |------------------|------------------|------------------|
+Cloudflare D1      Cloudflare R2      Workers rate limiting   Clerk (sign-in, JWKS,
+(banyan-db)        (banyan-media)     (RATE_LIMITER)          Backend API for names)
 ```
+
+The browser loads Clerk's JavaScript from the Clerk instance's Frontend API.
 
 The Worker entry is `src/worker.ts`. It serves the Hono API for `/api/*` requests
 (`run_worker_first` in `wrangler.jsonc`) and delegates every other path to the static assets
@@ -31,40 +31,49 @@ Production URL: `https://banyan.srijan-guchhait.workers.dev` on the Cloudflare a
 | D1 database        | `banyan-db` (`9f1b3386-bd11-493f-852d-9915821e71aa`)  |
 | R2 bucket          | `banyan-media` (private; read only through the API)   |
 | Rate limit binding | `RATE_LIMITER`, namespace `1001`, 100 requests / 60s  |
-| Access application | "Banyan", domain `banyan.srijan-guchhait.workers.dev` |
-| Access team        | `qwertystars.cloudflareaccess.com`                    |
+| Clerk application  | development instance; its keys go in the settings below |
 
 ## Configuration
 
-All production settings are plain `vars` in `wrangler.jsonc`; there are no secrets.
+| Setting                   | Where                          | Value                                                 |
+| ------------------------- | ------------------------------ | ----------------------------------------------------- |
+| `AUTH_PROVIDER`           | `vars`                         | `clerk`                                               |
+| `CLERK_PUBLISHABLE_KEY`   | `vars` (public)                | `pk_test_...` from Clerk → Configure → API keys       |
+| `CLERK_SECRET_KEY`        | secret (`wrangler secret put`) | `sk_test_...` from the same page                      |
+| `APP_BASE_URL`            | `vars`                         | `https://banyan.srijan-guchhait.workers.dev`          |
+| `AUTH_AUTHORIZED_PARTIES` | `vars` (optional)              | extra allowed origins; defaults to `APP_BASE_URL`'s   |
 
-| Variable        | Production value                                                |
-| --------------- | --------------------------------------------------------------- |
-| `AUTH_PROVIDER` | `cloudflare-access`                                             |
-| `AUTH_ISSUER`   | `https://qwertystars.cloudflareaccess.com`                      |
-| `AUTH_JWKS_URI` | `https://qwertystars.cloudflareaccess.com/cdn-cgi/access/certs` |
-| `AUTH_AUDIENCE` | the Access application's AUD tag                                |
-| `APP_BASE_URL`  | `https://banyan.srijan-guchhait.workers.dev`                    |
-
-Never set `AUTH_DEV_MODE` in production. When it is not `"true"` the development
-`/api/auth/login` route is not mounted, so only Access tokens are accepted.
+The token issuer and JWKS URL are derived from the publishable key. Never set
+`AUTH_DEV_MODE` in production. When it is not `"true"` the development `/api/auth/login` route
+is not mounted, so only Clerk tokens are accepted.
 
 ## First-time setup
 
 1. Create the D1 database and R2 bucket (done; IDs above).
-2. Create the Access application (Zero Trust → Access → Applications → Add → Self-hosted):
-   - domain `banyan.srijan-guchhait.workers.dev`
-   - identity providers: One-time PIN and Google
-   - session duration 30 days
-   - one Allow policy that includes Everyone
-3. Copy the application's AUD tag into `AUTH_AUDIENCE` in `wrangler.jsonc`.
-4. Sign wrangler in: `pnpm exec wrangler login`.
+2. Create a Clerk application at dashboard.clerk.com and choose its sign-in methods (for
+   example email code, phone code and Google). In its development instance, add
+   `https://banyan.srijan-guchhait.workers.dev` under allowed origins if Clerk asks for it.
+3. Put the publishable key in `CLERK_PUBLISHABLE_KEY` in `wrangler.jsonc`.
+4. Sign wrangler in and store the secret key:
+
+   ```bash
+   pnpm exec wrangler login
+   pnpm exec wrangler secret put CLERK_SECRET_KEY
+   ```
+
 5. Apply migrations and deploy:
 
    ```bash
    pnpm db:apply:cloudflare
    pnpm deploy:cloudflare
    ```
+
+### Moving to a Clerk production instance
+
+A development instance (`pk_test_`) works on `workers.dev` but shows a development banner.
+A production instance (`pk_live_`) needs a domain you control: add it in Clerk, create the DNS
+records Clerk lists, attach the same domain to the Worker as a custom domain, then update
+`APP_BASE_URL`, `CLERK_PUBLISHABLE_KEY` and the `CLERK_SECRET_KEY` secret.
 
 ## Routine deploys
 
@@ -78,8 +87,8 @@ pnpm deploy:cloudflare
 
 There is no staging environment yet. To add one, create `banyan-db-staging` and
 `banyan-media-staging`, add an `env.staging` block to `wrangler.jsonc` with its own bindings,
-a separate Access application for `banyan-staging.srijan-guchhait.workers.dev`, and its own
-`AUTH_AUDIENCE`. Production must never share its database or bucket with staging.
+its own `APP_BASE_URL`, and a separate Clerk instance or application. Production must never
+share its database or bucket with staging.
 
 ## Local development
 

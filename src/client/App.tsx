@@ -10,7 +10,7 @@ import { HomePage } from "~/client/pages/HomePage";
 import { NotFoundPage } from "~/client/pages/NotFoundPage";
 import { InvitationPage } from "~/client/pages/InvitationPage";
 import { PersonPage } from "~/client/pages/PersonPage";
-import { SignInPage } from "~/client/pages/SignInPage";
+import { SignInPage, SignUpPage } from "~/client/pages/SignInPage";
 import { TreePage } from "~/client/pages/TreePage";
 
 export function App() {
@@ -18,6 +18,7 @@ export function App() {
     <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/sign-in" element={<SignInPage />} />
+      <Route path="/sign-up" element={<SignUpPage />} />
       <Route path="/invitations/:token" element={<InvitationPage />} />
       <Route
         element={

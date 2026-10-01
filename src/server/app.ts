@@ -45,16 +45,17 @@ if (env.AUTH_DEV_MODE === "true") {
 
 // Tells the sign-in page which flow to show.
 server.get("/api/auth/config", (c) =>
-  c.json({ provider: env.AUTH_PROVIDER, devSignIn: env.AUTH_DEV_MODE === "true" }),
+  c.json({
+    provider: env.AUTH_PROVIDER,
+    devSignIn: env.AUTH_DEV_MODE === "true",
+    clerkPublishableKey: env.AUTH_PROVIDER === "clerk" ? env.CLERK_PUBLISHABLE_KEY ?? null : null,
+  }),
 );
 
+// Ends the development sign-in. Clerk sessions are ended in the browser by
+// Clerk's signOut(), which also revokes the session on Clerk's side.
 server.post("/api/auth/logout", (c) => {
   deleteCookie(c, "auth_token", { path: "/" });
-  // Behind Cloudflare Access the session lives in Access's CF_Authorization
-  // cookie, which only Access's own logout endpoint can clear.
-  if (env.AUTH_PROVIDER === "cloudflare-access" && env.AUTH_DEV_MODE !== "true") {
-    return c.redirect("/cdn-cgi/access/logout");
-  }
   return c.redirect("/sign-in");
 });
 

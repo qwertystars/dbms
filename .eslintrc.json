@@ -6,7 +6,10 @@
     "node_modules",
     ".wrangler",
     "db/migrations",
-    "worker-configuration.d.ts"
+    "worker-configuration.d.ts",
+    "tools",
+    ".claude",
+    ".omo"
   ],
   "overrides": [
     {

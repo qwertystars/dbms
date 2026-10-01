@@ -6,3 +6,8 @@ worker-configuration.d.ts
 *.min.js
 *.min.css
 db/migrations/meta
+
+# Vendored lint plugin and agent tooling
+tools/oxlint/anti-slop
+.claude
+.omo

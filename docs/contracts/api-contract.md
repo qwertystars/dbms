@@ -393,15 +393,17 @@ account and returns it.
 
 ## Authentication routes (outside `/api/v1`)
 
-- `GET /api/auth/config` returns `{ provider: "oidc" | "cloudflare-access", devSignIn }` for the
-  sign-in page.
-- `POST /api/auth/logout` clears the development cookie and redirects to `/sign-in`, or to
-  `/cdn-cgi/access/logout` when `AUTH_PROVIDER=cloudflare-access` (and dev sign-in is off).
+- `GET /api/auth/config` returns
+  `{ provider: "oidc" | "clerk", devSignIn, clerkPublishableKey }` for the sign-in page.
+  `clerkPublishableKey` is `null` unless the provider is Clerk.
+- `POST /api/auth/logout` clears the development cookie and redirects to `/sign-in`. Clerk
+  sessions are ended in the browser with Clerk's `signOut()`.
 - `POST /api/auth/login` exists only when `AUTH_DEV_MODE=true`.
 
-Tokens are accepted from the `Cf-Access-Jwt-Assertion` header (Cloudflare Access), an
-`Authorization: Bearer` header, or the development `auth_token` cookie. All are RS256 JWTs
-checked against the configured JWKS, issuer and audience.
+Tokens are accepted from an `Authorization: Bearer` header, Clerk's `__session` cookie, or the
+development `auth_token` cookie, in that order. All are RS256 JWTs checked against the
+provider's JWKS and issuer. For Clerk, the `azp` claim must be an allowed origin and pending
+sessions (`sts: "pending"`) are rejected; for OIDC, the audience is checked.
 
 ## HTTP semantics
 
