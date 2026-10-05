@@ -77,6 +77,20 @@ pnpm db:apply:cloudflare   # only when db/migrations changed
 pnpm deploy:cloudflare
 ```
 
+## Troubleshooting sign-in
+
+If Access lets you in but the app shows "We couldn't sign you in", the message says why:
+
+- `Your sign-in could not be verified (ERR_JWT_CLAIM_VALIDATION_FAILED: iss)` or `(… aud)`:
+  `AUTH_ISSUER` or `AUTH_AUDIENCE` in `wrangler.jsonc` does not match the Access application.
+- `Your sign-in could not be verified (ERR_JWS_SIGNATURE_VERIFICATION_FAILED)` or
+  `(ERR_JWKS_NO_MATCHING_KEY)`: `AUTH_JWKS_URI` points at the wrong team.
+- `You are signed in, but your account could not be loaded`: the API could not read or create
+  the account, usually because migrations were not applied. Run `pnpm db:apply:cloudflare`.
+
+Each failure is also logged with its request id; follow them with
+`pnpm exec wrangler tail banyan` or in the Worker's Observability logs.
+
 ## Staging
 
 There is no staging environment yet. To add one, create `banyan-db-staging` and

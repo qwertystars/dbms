@@ -17,6 +17,8 @@ export interface RequestContext {
   requestStart: number;
   objects: ObjectStore;
   account?: Account;
+  // Why a presented token was rejected (for example "ERR_JWT_CLAIM_VALIDATION_FAILED: iss").
+  authError?: string;
 }
 
 export type HonoContext = Context & { var: { ctx: RequestContext } };

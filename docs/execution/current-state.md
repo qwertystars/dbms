@@ -25,6 +25,7 @@ The frontend is a Vite + React single-page application and the backend is a stan
 - Environment validation with `dotenv`, including empty-string-to-undefined handling for optional values.
 - Hono-based REST API under `/api/v1` with request context, structured logging, security headers, and rate limiting.
 - Account provisioning from the token subject. Production sign-in is Cloudflare Access (email one-time PIN or Google): the API reads `Cf-Access-Jwt-Assertion` and verifies it against the Access team JWKS and issuer, plus the audience when `AUTH_AUDIENCE` is set (ADR-004). New accounts are named from the token's `name`, else the email's local part; `PATCH /me` and a "Your name" card on the Friends page let people rename themselves.
+- Sign-in failures are reported, not swallowed: a rejected token returns `401 INVALID_TOKEN` with the `jose` error code (logged as a warning), and a valid token whose account cannot be loaded returns `503 ACCOUNT_UNAVAILABLE` (cause logged as an error). The sign-in page shows these with the request id instead of sending the browser back through Access in a loop.
 - Development-only cookie sign-in mounted only when `AUTH_DEV_MODE=true` (`pnpm dev:api` sets it). The route is absent otherwise, so production Workers builds cannot mint trusted tokens.
 - Cookie and Bearer token authentication for both browser UI and API clients.
 - Family CRUD, member role management (CREATOR/EDITOR/VIEWER), invitations, ownership transfer, and soft delete.
@@ -59,7 +60,7 @@ The frontend is a Vite + React single-page application and the backend is a stan
 ## Partially implemented capabilities
 
 - Post attachments and account avatars can be uploaded through the API, but the UI only uploads person profile photos.
-- Cloudflare deployment: the D1 database `banyan-db` and R2 bucket `banyan-media` exist on the Cloudflare account (created 2026-09-23). `AUTH_AUDIENCE` is optional and not set in `wrangler.jsonc`, so the API checks Access tokens by team signature and issuer only. Migrations have not been applied to the remote database, and the Worker has not been deployed.
+- Cloudflare deployment: the D1 database `banyan-db` and R2 bucket `banyan-media` exist on the Cloudflare account (created 2026-09-23). `AUTH_AUDIENCE` is optional and not set in `wrangler.jsonc`, so the API checks Access tokens by team signature and issuer only. The Worker is deployed behind the Access application (verified 2026-10-05: requests redirect to the `qwertystars` Access login). Whether migrations have been applied to the remote database is not confirmed; users reported being unable to sign in after passing Access.
 
 Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF export, external import, AI) remain intentionally out of scope per the plan.
 

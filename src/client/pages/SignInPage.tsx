@@ -11,7 +11,7 @@ interface AuthConfig {
 }
 
 export function SignInPage() {
-  const { status } = useAuth();
+  const { status, error, refresh } = useAuth();
   const [searchParams] = useSearchParams();
   const [config, setConfig] = useState<AuthConfig | null>(null);
   const requested = searchParams.get("returnTo") || "";
@@ -35,6 +35,8 @@ export function SignInPage() {
             <Loading />
           ) : config.devSignIn ? (
             <DevSignIn returnTo={returnTo} />
+          ) : status === "error" ? (
+            <SignInProblem message={error} onRetry={refresh} />
           ) : config.provider === "cloudflare-access" ? (
             <AccessSignIn returnTo={returnTo} />
           ) : (
@@ -72,6 +74,47 @@ function AccessSignIn({ returnTo }: { returnTo: string }) {
           Still stuck here after signing in?{" "}
           <button type="submit" className="btn btn-ghost btn-sm">
             Sign out and try again
+          </button>
+        </p>
+      </form>
+    </>
+  );
+}
+
+// Cloudflare Access let the browser through, but the API could not confirm the
+// account. Retrying through Access would land here again, so say what went wrong.
+function SignInProblem({
+  message,
+  onRetry,
+}: {
+  message: string | null;
+  onRetry: () => Promise<void>;
+}) {
+  const [retrying, setRetrying] = useState(false);
+  return (
+    <>
+      <div>
+        <h1 style={{ fontSize: "1.5rem" }}>We couldn&rsquo;t sign you in</h1>
+        <p className="muted" style={{ marginTop: 6 }} role="alert">
+          {message || "The server could not confirm your account."}
+        </p>
+      </div>
+      <button
+        type="button"
+        className="btn btn-primary btn-block"
+        disabled={retrying}
+        onClick={() => {
+          setRetrying(true);
+          void onRetry().finally(() => setRetrying(false));
+        }}
+      >
+        {retrying ? "Trying again…" : "Try again"}
+      </button>
+      <form action="/api/auth/logout" method="post">
+        <p className="subtle">
+          Still not working?{" "}
+          <button type="submit" className="btn btn-ghost btn-sm">
+            Sign out and start over
           </button>
         </p>
       </form>

@@ -12,6 +12,14 @@ export class AppError extends Error {
 
 export const Errors = {
   UNAUTHENTICATED: () => new AppError("UNAUTHENTICATED", "Authentication required.", 401),
+  INVALID_TOKEN: (reason: string) =>
+    new AppError("INVALID_TOKEN", `Your sign-in could not be verified (${reason}).`, 401),
+  ACCOUNT_UNAVAILABLE: () =>
+    new AppError(
+      "ACCOUNT_UNAVAILABLE",
+      "You are signed in, but your account could not be loaded. Try again shortly.",
+      503,
+    ),
   FORBIDDEN: (message = "You do not have permission to perform this action.") =>
     new AppError("FORBIDDEN", message, 403),
   NOT_FOUND: (message = "Resource not found.") => new AppError("NOT_FOUND", message, 404),

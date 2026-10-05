@@ -35,8 +35,8 @@ import type { Account } from "~/lib/context";
 import { getFamily } from "~/modules/families/service";
 
 function requireAccount(c: any): Account {
-  const account = c.get("ctx").account;
-  if (!account) throw Errors.UNAUTHENTICATED();
+  const { account, authError } = c.get("ctx");
+  if (!account) throw authError ? Errors.INVALID_TOKEN(authError) : Errors.UNAUTHENTICATED();
   return account;
 }
 

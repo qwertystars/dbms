@@ -141,6 +141,7 @@ describe("Cloudflare Access sign-in", () => {
       }),
     );
     expect(response.status).toBe(401);
+    expect(((await response.json()) as any).error.code).toBe("INVALID_TOKEN");
   });
 
   it("rejects an Access header from a different issuer", async () => {
@@ -157,6 +158,29 @@ describe("Cloudflare Access sign-in", () => {
       }),
     );
     expect(response.status).toBe(401);
+    const body = (await response.json()) as any;
+    expect(body.error.code).toBe("INVALID_TOKEN");
+    expect(body.error.message).toContain("iss");
+  });
+
+  it("reports an account that cannot be loaded as a server error, not a sign-in failure", async () => {
+    const token = await getTestToken("access-user-db-down");
+    // What an un-migrated D1 database looks like to the API.
+    await db.run(sql`ALTER TABLE accounts RENAME TO accounts_unmigrated`);
+    try {
+      const res = await apiRequest("GET", "/api/v1/me", undefined, token);
+      expect(res.status).toBe(503);
+      expect(res.body.error.code).toBe("ACCOUNT_UNAVAILABLE");
+      expect(res.body.error.message).not.toContain("no such table");
+    } finally {
+      await db.run(sql`ALTER TABLE accounts_unmigrated RENAME TO accounts`);
+    }
+  });
+
+  it("still answers UNAUTHENTICATED when no token is presented", async () => {
+    const res = await apiRequest("GET", "/api/v1/me");
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe("UNAUTHENTICATED");
   });
 
   it("makes the audience optional only for Cloudflare Access", () => {

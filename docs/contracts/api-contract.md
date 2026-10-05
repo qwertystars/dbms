@@ -404,6 +404,19 @@ Tokens are accepted from the `Cf-Access-Jwt-Assertion` header (Cloudflare Access
 checked against the configured JWKS and issuer, and against the audience when one is
 configured (`AUTH_AUDIENCE` is optional with Cloudflare Access).
 
+Authentication failures are distinguishable:
+
+- `401 UNAUTHENTICATED`: no token was presented.
+- `401 INVALID_TOKEN`: a token was presented but rejected. The message names the `jose` error
+  code and, for claim failures, the claim (for example `ERR_JWT_CLAIM_VALIDATION_FAILED: iss`).
+- `503 ACCOUNT_UNAVAILABLE`: the token is valid but the account could not be loaded or
+  provisioned (for example, migrations have not been applied). The cause is logged, not
+  returned.
+
+The web client sends the browser back through sign-in only on `UNAUTHENTICATED`. Any other
+failure is shown on the sign-in page with the request id, because retrying through Cloudflare
+Access would loop.
+
 ## HTTP semantics
 
 Use:

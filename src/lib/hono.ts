@@ -6,7 +6,7 @@ import { localObjectStore, type ObjectStore } from "~/lib/object-store";
 import { createDb } from "~/lib/db";
 import { env } from "~/lib/env";
 import type { D1Database } from "@cloudflare/workers-types";
-import { AppError } from "~/lib/errors";
+import { AppError, Errors } from "~/lib/errors";
 import { log } from "~/lib/logger";
 import { getRequestId, runWithContext } from "~/lib/context";
 
@@ -62,6 +62,14 @@ app.use(async (c, next) => {
   await runWithContext(ctx, next);
 });
 
+// jose errors carry a stable code and, for claim failures, the claim name. Neither
+// reveals anything about the keys, so both are safe to return to the caller.
+function describeTokenError(e: unknown): string {
+  const err = e as { code?: string; claim?: string; message?: string };
+  if (err?.code) return err.claim ? `${err.code}: ${err.claim}` : err.code;
+  return err?.message || "unknown error";
+}
+
 function extractToken(c: any): string | undefined {
   // Cloudflare Access puts its signed identity token on every request it lets through.
   const accessToken = c.req.header("cf-access-jwt-assertion");
@@ -81,14 +89,41 @@ function extractToken(c: any): string | undefined {
 app.use(async (c, next) => {
   const token = extractToken(c);
   if (token) {
+    const ctx = c.get("ctx");
+    let payload: Awaited<ReturnType<typeof verifyAccessToken>> | undefined;
     try {
-      const payload = await verifyAccessToken(token);
-      const subject = payload.sub;
-      if (!subject) throw new Error("Missing subject");
-      const account = await getOrCreateAccount(subject, displayNameFromClaims(payload));
-      c.get("ctx").account = account;
+      payload = await verifyAccessToken(token);
+      if (!payload.sub) throw new Error("Missing subject");
     } catch (e) {
-      // intentionally ignored; route handlers enforce auth
+      // Route handlers enforce auth; record why so the 401 and the logs say so.
+      payload = undefined;
+      ctx.authError = describeTokenError(e);
+      log({
+        level: "warn",
+        requestId: ctx.requestId,
+        route: c.req.path,
+        method: c.req.method,
+        errorCode: "INVALID_TOKEN",
+        message: `Token rejected: ${ctx.authError}`,
+      });
+    }
+    if (payload) {
+      try {
+        ctx.account = await getOrCreateAccount(payload.sub!, displayNameFromClaims(payload));
+      } catch (e) {
+        // A valid token whose account cannot be loaded is a server fault (for example
+        // migrations not applied), not a sign-in problem. Reporting it as 401 would
+        // send the browser back to the sign-in page in a loop.
+        log({
+          level: "error",
+          requestId: ctx.requestId,
+          route: c.req.path,
+          method: c.req.method,
+          errorCode: "ACCOUNT_UNAVAILABLE",
+          message: e instanceof Error ? e.message : String(e),
+        });
+        throw Errors.ACCOUNT_UNAVAILABLE();
+      }
     }
   }
   await next();
