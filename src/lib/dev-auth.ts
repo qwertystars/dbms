@@ -22,11 +22,9 @@ export async function signDevToken(subject: string, displayName: string) {
   }
   await ensureDevKeys();
   if (!devPrivateKey) throw new Error("Dev keys not initialized");
-  return await new SignJWT({ sub: subject, name: displayName })
+  const jwt = new SignJWT({ sub: subject, name: displayName })
     .setProtectedHeader({ alg: "RS256", kid: "dev-key" })
-    .setIssuer(env.AUTH_ISSUER)
-    .setAudience(env.AUTH_AUDIENCE)
-    .setIssuedAt()
-    .setExpirationTime("2h")
-    .sign(devPrivateKey);
+    .setIssuer(env.AUTH_ISSUER);
+  if (env.AUTH_AUDIENCE) jwt.setAudience(env.AUTH_AUDIENCE);
+  return await jwt.setIssuedAt().setExpirationTime("2h").sign(devPrivateKey);
 }

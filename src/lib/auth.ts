@@ -6,7 +6,7 @@ import {
   type JWTPayload,
   type KeyLike,
 } from "jose";
-import { env } from "~/lib/env";
+import { env, type Env } from "~/lib/env";
 
 export interface AuthContext {
   accountId: string;
@@ -42,12 +42,19 @@ function getResolver(): KeyResolver | undefined {
   return undefined;
 }
 
-export async function verifyAccessToken(token: string): Promise<JWTPayload> {
-  const options = {
-    issuer: env.AUTH_ISSUER,
-    audience: env.AUTH_AUDIENCE,
+// The audience is checked only when AUTH_AUDIENCE is set. Behind Cloudflare
+// Access it may be left out, and then the signature and issuer (the team
+// domain) are what tie a token to this deployment.
+export function verifyOptions(config: Pick<Env, "AUTH_ISSUER" | "AUTH_AUDIENCE">) {
+  return {
+    issuer: config.AUTH_ISSUER,
     algorithms: ["RS256"],
+    ...(config.AUTH_AUDIENCE ? { audience: config.AUTH_AUDIENCE } : {}),
   };
+}
+
+export async function verifyAccessToken(token: string): Promise<JWTPayload> {
+  const options = verifyOptions(env);
 
   if (devKeys) {
     for (const key of devKeys) {

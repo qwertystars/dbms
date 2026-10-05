@@ -4,7 +4,8 @@ import { sql } from "drizzle-orm";
 import { db } from "~/lib/db";
 import * as schema from "~/db/schema";
 import { app } from "~/lib/hono";
-import { displayNameFromClaims } from "~/lib/auth";
+import { displayNameFromClaims, verifyOptions } from "~/lib/auth";
+import { parseEnv } from "~/lib/env";
 import { sniffImageType, stripImageMetadata } from "~/modules/media/sanitize";
 import { setup } from "./setup";
 import { apiRequest, getTestToken } from "./helpers";
@@ -140,6 +141,38 @@ describe("Cloudflare Access sign-in", () => {
       }),
     );
     expect(response.status).toBe(401);
+  });
+
+  it("rejects an Access header from a different issuer", async () => {
+    const token = await new SignJWT({ email: "x@example.com" })
+      .setProtectedHeader({ alg: "RS256", kid: "test-key" })
+      .setSubject("other-team")
+      .setIssuer("https://someone-else.cloudflareaccess.com")
+      .setAudience("family-social-network")
+      .setExpirationTime("1h")
+      .sign((globalThis as any).__testPrivateKey);
+    const response = await app.fetch(
+      new Request("http://localhost:3000/api/v1/me", {
+        headers: { "Cf-Access-Jwt-Assertion": token },
+      }),
+    );
+    expect(response.status).toBe(401);
+  });
+
+  it("makes the audience optional only for Cloudflare Access", () => {
+    const access = parseEnv({
+      AUTH_PROVIDER: "cloudflare-access",
+      AUTH_ISSUER: "https://team.cloudflareaccess.com",
+    });
+    expect(access.AUTH_AUDIENCE).toBeUndefined();
+    expect(verifyOptions(access)).not.toHaveProperty("audience");
+    expect(verifyOptions(access).issuer).toBe("https://team.cloudflareaccess.com");
+
+    const pinned = parseEnv({ AUTH_PROVIDER: "cloudflare-access", AUTH_AUDIENCE: "aud-tag" });
+    expect(verifyOptions(pinned).audience).toBe("aud-tag");
+
+    const oidc = parseEnv({ AUTH_PROVIDER: "oidc", AUTH_AUDIENCE: "" });
+    expect(verifyOptions(oidc).audience).toBe("family-social-network");
   });
 
   it("prefers a name claim and never exposes a full email as the display name", () => {

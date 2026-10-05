@@ -21,12 +21,12 @@
   },
   "vars": {
     "APP_BASE_URL": "https://banyan.srijan-guchhait.workers.dev",
-    // Sign-in is Cloudflare Access (email one-time PIN or Google) for the
-    // qwertystars team. AUTH_AUDIENCE is the Access application's AUD tag.
+    // Sign-in is Cloudflare Access for the qwertystars team. Tokens are checked
+    // against the team's keys and issuer. AUTH_AUDIENCE (the Access
+    // application's AUD tag) is optional; set it to accept only this app's tokens.
     "AUTH_PROVIDER": "cloudflare-access",
     "AUTH_ISSUER": "https://qwertystars.cloudflareaccess.com",
     "AUTH_JWKS_URI": "https://qwertystars.cloudflareaccess.com/cdn-cgi/access/certs",
-    "AUTH_AUDIENCE": "SET_TO_ACCESS_APPLICATION_AUD_TAG",
   },
   "d1_databases": [
     {

@@ -401,7 +401,8 @@ account and returns it.
 
 Tokens are accepted from the `Cf-Access-Jwt-Assertion` header (Cloudflare Access), an
 `Authorization: Bearer` header, or the development `auth_token` cookie. All are RS256 JWTs
-checked against the configured JWKS, issuer and audience.
+checked against the configured JWKS and issuer, and against the audience when one is
+configured (`AUTH_AUDIENCE` is optional with Cloudflare Access).
 
 ## HTTP semantics
 
