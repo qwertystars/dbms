@@ -9,7 +9,10 @@ const envSchema = z.object({
   AUTH_JWKS_URI: z.preprocess(emptyToUndefined, z.string().url().optional()),
   AUTH_JWKS: z.preprocess(emptyToUndefined, z.string().optional()),
   AUTH_ISSUER: z.string().min(1).default("http://localhost:3000"),
-  AUTH_AUDIENCE: z.string().min(1).default("family-social-network"),
+  // Optional with Cloudflare Access: without it the API accepts any token signed
+  // by the Access team (AUTH_ISSUER), whichever Access application issued it.
+  // Other providers default to the development audience.
+  AUTH_AUDIENCE: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   // "cloudflare-access": Cloudflare Access sits in front of the app, signs users in
   // (email one-time PIN) and forwards a signed token on every request.
   AUTH_PROVIDER: z.preprocess(
@@ -20,6 +23,14 @@ const envSchema = z.object({
   AUTH_DEV_MODE: z.preprocess(emptyToUndefined, z.enum(["true", "false"]).default("false")),
 });
 
-export const env = envSchema.parse(process.env);
+export function parseEnv(input: Record<string, unknown>) {
+  const parsed = envSchema.parse(input);
+  if (parsed.AUTH_AUDIENCE === undefined && parsed.AUTH_PROVIDER !== "cloudflare-access") {
+    parsed.AUTH_AUDIENCE = "family-social-network";
+  }
+  return parsed;
+}
+
+export const env = parseEnv(process.env);
 
 export type Env = z.infer<typeof envSchema>;

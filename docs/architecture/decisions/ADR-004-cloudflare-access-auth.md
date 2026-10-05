@@ -18,8 +18,9 @@ Put a Cloudflare Access self-hosted application in front of
 identity providers, and a 30-day session. Access proves an email address; the app's own
 memberships still decide what each account may see.
 
-The Worker verifies the `Cf-Access-Jwt-Assertion` token itself (signature via the team JWKS,
-issuer `https://qwertystars.cloudflareaccess.com`, audience = the application's AUD tag). The
+The Worker verifies the `Cf-Access-Jwt-Assertion` token itself (signature via the team JWKS
+and issuer `https://qwertystars.cloudflareaccess.com`; audience = the application's AUD tag
+when `AUTH_AUDIENCE` is set). The
 JWKS is cached by `jose` and refetched when a token has an unknown `kid`, so Access key
 rotation needs no redeploy. The account subject is the Access `sub`; the initial display name
 is the email's local part, and people can rename themselves (`PATCH /me`).
@@ -35,8 +36,11 @@ Access does not cover them.
   different provider.
 - Phone OTP (spec §2) is not available through Access; it needs a separate provider later.
 - The landing page is behind Access, so there is no public marketing page on this hostname.
-- Changing the Access application recreates its AUD tag, which must then be updated in
-  `wrangler.jsonc`.
+- `AUTH_AUDIENCE` is optional (amended 2026-10-05). Production runs without it, so a token
+  from any Access application in the team is accepted and the team's Access policies decide
+  who gets in. Set it before adding other Access applications to the team, or a staging
+  environment. When it is set, recreating the Access application changes the AUD tag, which
+  must then be updated in `wrangler.jsonc`.
 
 ## Rejected alternatives
 

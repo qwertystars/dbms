@@ -43,7 +43,7 @@ All production settings are plain `vars` in `wrangler.jsonc`; there are no secre
 | `AUTH_PROVIDER` | `cloudflare-access`                                             |
 | `AUTH_ISSUER`   | `https://qwertystars.cloudflareaccess.com`                      |
 | `AUTH_JWKS_URI` | `https://qwertystars.cloudflareaccess.com/cdn-cgi/access/certs` |
-| `AUTH_AUDIENCE` | the Access application's AUD tag                                |
+| `AUTH_AUDIENCE` | optional; the Access application's AUD tag (not set)            |
 | `APP_BASE_URL`  | `https://banyan.srijan-guchhait.workers.dev`                    |
 
 Never set `AUTH_DEV_MODE` in production. When it is not `"true"` the development
@@ -57,7 +57,10 @@ Never set `AUTH_DEV_MODE` in production. When it is not `"true"` the development
    - identity providers: One-time PIN and Google
    - session duration 30 days
    - one Allow policy that includes Everyone
-3. Copy the application's AUD tag into `AUTH_AUDIENCE` in `wrangler.jsonc`.
+3. Optional: copy the application's AUD tag into `AUTH_AUDIENCE` in `wrangler.jsonc`. Without
+   it the API accepts a token from any Access application in the `qwertystars` team, so who
+   can sign in is decided by the team's Access policies. Set it once the team has other
+   Access applications whose users should not get into Banyan.
 4. Sign wrangler in: `pnpm exec wrangler login`.
 5. Apply migrations and deploy:
 
@@ -78,8 +81,8 @@ pnpm deploy:cloudflare
 
 There is no staging environment yet. To add one, create `banyan-db-staging` and
 `banyan-media-staging`, add an `env.staging` block to `wrangler.jsonc` with its own bindings,
-a separate Access application for `banyan-staging.srijan-guchhait.workers.dev`, and its own
-`AUTH_AUDIENCE`. Production must never share its database or bucket with staging.
+a separate Access application for `banyan-staging.srijan-guchhait.workers.dev`, and set
+`AUTH_AUDIENCE` in both environments so staging tokens are not accepted by production. Production must never share its database or bucket with staging.
 
 ## Local development
 

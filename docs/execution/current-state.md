@@ -24,7 +24,7 @@ The frontend is a Vite + React single-page application and the backend is a stan
 - Foreign-key enforcement is enabled on the local libsql client (`PRAGMA foreign_keys = ON`) to match D1, which enforces foreign keys on every query.
 - Environment validation with `dotenv`, including empty-string-to-undefined handling for optional values.
 - Hono-based REST API under `/api/v1` with request context, structured logging, security headers, and rate limiting.
-- Account provisioning from the token subject. Production sign-in is Cloudflare Access (email one-time PIN or Google): the API reads `Cf-Access-Jwt-Assertion` and verifies it against the Access team JWKS, issuer and audience (ADR-004). New accounts are named from the token's `name`, else the email's local part; `PATCH /me` and a "Your name" card on the Friends page let people rename themselves.
+- Account provisioning from the token subject. Production sign-in is Cloudflare Access (email one-time PIN or Google): the API reads `Cf-Access-Jwt-Assertion` and verifies it against the Access team JWKS and issuer, plus the audience when `AUTH_AUDIENCE` is set (ADR-004). New accounts are named from the token's `name`, else the email's local part; `PATCH /me` and a "Your name" card on the Friends page let people rename themselves.
 - Development-only cookie sign-in mounted only when `AUTH_DEV_MODE=true` (`pnpm dev:api` sets it). The route is absent otherwise, so production Workers builds cannot mint trusted tokens.
 - Cookie and Bearer token authentication for both browser UI and API clients.
 - Family CRUD, member role management (CREATOR/EDITOR/VIEWER), invitations, ownership transfer, and soft delete.
@@ -59,7 +59,7 @@ The frontend is a Vite + React single-page application and the backend is a stan
 ## Partially implemented capabilities
 
 - Post attachments and account avatars can be uploaded through the API, but the UI only uploads person profile photos.
-- Cloudflare deployment: the D1 database `banyan-db` and R2 bucket `banyan-media` exist on the Cloudflare account (created 2026-09-23). The Access application has not been created, `AUTH_AUDIENCE` in `wrangler.jsonc` is still a placeholder, migrations have not been applied to the remote database, and the Worker has not been deployed.
+- Cloudflare deployment: the D1 database `banyan-db` and R2 bucket `banyan-media` exist on the Cloudflare account (created 2026-09-23). `AUTH_AUDIENCE` is optional and not set in `wrangler.jsonc`, so the API checks Access tokens by team signature and issuer only. Migrations have not been applied to the remote database, and the Worker has not been deployed.
 
 Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF export, external import, AI) remain intentionally out of scope per the plan.
 
@@ -141,7 +141,7 @@ Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF
 
 None required for v1.0. Optional follow-ups:
 
-- Create the Access application, set `AUTH_AUDIENCE`, apply migrations to `banyan-db` and deploy (see `docs/operations/deployment.md`).
+- Confirm the Access application covers the Worker hostname, apply migrations to `banyan-db` and deploy (see `docs/operations/deployment.md`).
 - Add controls for existing API features not yet in the UI: removing relationships, ownership transfer, and family editing/deletion.
 - Add e2e tests (Playwright/Cypress).
 - Clean up orphaned media and add post-attachment uploads to the feed UI.

@@ -41,8 +41,10 @@ Authenticated subject claims are mapped to an internal Account.
 In production, Cloudflare Access (team `qwertystars`) signs people in with an email one-time
 PIN or Google before any request reaches the Worker, and forwards a signed JWT in
 `Cf-Access-Jwt-Assertion`. The API does not trust Access blindly: it verifies that token's
-RS256 signature against the team JWKS (cached, refetched on unknown `kid`), plus issuer and
-audience (the Access application's AUD tag). A request that bypasses Access therefore has no
+RS256 signature against the team JWKS (cached, refetched on unknown `kid`) and the issuer, plus
+the audience (the Access application's AUD tag) when `AUTH_AUDIENCE` is set. Without the
+audience, a token from any Access application in the team is accepted, so the team's Access
+policies decide who can sign in. A request that bypasses Access therefore has no
 valid token and is treated as anonymous. Access only proves an email address; family access
 is still decided by memberships. See ADR-004.
 
