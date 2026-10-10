@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { db } from "~/lib/db";
 import * as schema from "~/db/schema";
-import { signDevToken } from "~/lib/dev-auth";
 import { server } from "~/server/app";
 import { setup } from "./setup";
 import { apiRequest, getTestToken } from "./helpers";
@@ -63,18 +62,13 @@ async function inviteAndAccept(
   return { invitationToken: body.token as string, targetToken };
 }
 
-describe("Development sign-in gate", () => {
-  it("does not expose /api/auth/login when AUTH_DEV_MODE is off", async () => {
-    const response = await server.fetch(
-      new Request("http://localhost:3000/api/auth/login", { method: "POST" }),
-      {} as never,
-      {} as never,
-    );
-    expect(response.status).toBe(404);
-  });
-
-  it("refuses to mint a development token when disabled", async () => {
-    await expect(signDevToken("someone", "Someone")).rejects.toThrow(/disabled/i);
+describe("Password requirement", () => {
+  it("rejects the old unrestricted subject-only login", async () => {
+    const response = await server.fetch(new Request("http://localhost:3000/api/auth/login", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subject: "someone" }),
+    }));
+    expect(response.status).toBe(400);
+    expect(response.headers.get("set-cookie")).toBeNull();
   });
 });
 

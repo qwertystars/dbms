@@ -29,9 +29,6 @@ importers:
       hono:
         specifier: 4.4.6
         version: 4.4.6
-      jose:
-        specifier: 5.2.4
-        version: 5.2.4
       nanoid:
         specifier: 5.0.7
         version: 5.0.7

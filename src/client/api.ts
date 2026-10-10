@@ -32,10 +32,9 @@ export async function api(
   return { status: response.status, body: json };
 }
 
-// The API never redirects, so a redirect means Cloudflare Access wants the user
-// to sign in again. A full page load lets Access show its sign-in screen.
+// Unexpected redirects are treated as an ended session.
 function sessionEnded(): ApiResult {
-  window.location.reload();
+  window.location.assign("/sign-in");
   return { status: 401, body: { error: { message: "Your session has ended. Sign in again." } } };
 }
 

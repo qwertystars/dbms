@@ -8,6 +8,13 @@
       "when": 1788612407478,
       "tag": "0000_calm_talon",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1791590400000,
+      "tag": "0001_local_login",
+      "breakpoints": true
     }
   ]
 }

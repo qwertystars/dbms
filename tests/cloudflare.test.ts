@@ -1,11 +1,8 @@
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
-import { SignJWT } from "jose";
 import { sql } from "drizzle-orm";
 import { db } from "~/lib/db";
 import * as schema from "~/db/schema";
 import { app } from "~/lib/hono";
-import { displayNameFromClaims, verifyOptions } from "~/lib/auth";
-import { parseEnv } from "~/lib/env";
 import { sniffImageType, stripImageMetadata } from "~/modules/media/sanitize";
 import { setup } from "./setup";
 import { apiRequest, getTestToken } from "./helpers";
@@ -84,7 +81,7 @@ async function rawRequest(method: string, path: string, token: string, body?: Ui
   return app.fetch(
     new Request(`http://localhost:3000${path}`, {
       method,
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "image/jpeg" },
+      headers: { Cookie: `auth_token=${token}`, "Content-Type": "image/jpeg" },
       body,
     }),
   );
@@ -103,86 +100,6 @@ async function uploadPersonPhoto(token: string, familyId: string) {
   expect(put.status).toBe(200);
   return intent.body.asset.id as string;
 }
-
-describe("Cloudflare Access sign-in", () => {
-  it("accepts the Cf-Access-Jwt-Assertion header and names the account from the email", async () => {
-    const token = await new SignJWT({ email: "paati.family@example.com" })
-      .setProtectedHeader({ alg: "RS256", kid: "test-key" })
-      .setSubject("access-user-1")
-      .setIssuer("http://localhost:3000")
-      .setAudience("family-social-network")
-      .setIssuedAt()
-      .setExpirationTime("1h")
-      .sign((globalThis as any).__testPrivateKey);
-    const response = await app.fetch(
-      new Request("http://localhost:3000/api/v1/me", {
-        headers: { "Cf-Access-Jwt-Assertion": token },
-      }),
-    );
-    expect(response.status).toBe(200);
-    const me = (await response.json()) as any;
-    expect(me.authSubject).toBe("access-user-1");
-    expect(me.displayName).toBe("paati.family");
-  });
-
-  it("rejects an Access header signed by an unknown key", async () => {
-    const { generateKeyPair } = await import("jose");
-    const { privateKey } = await generateKeyPair("RS256");
-    const forged = await new SignJWT({ email: "x@example.com" })
-      .setProtectedHeader({ alg: "RS256", kid: "test-key" })
-      .setSubject("forged")
-      .setIssuer("http://localhost:3000")
-      .setAudience("family-social-network")
-      .setExpirationTime("1h")
-      .sign(privateKey);
-    const response = await app.fetch(
-      new Request("http://localhost:3000/api/v1/me", {
-        headers: { "Cf-Access-Jwt-Assertion": forged },
-      }),
-    );
-    expect(response.status).toBe(401);
-  });
-
-  it("rejects an Access header from a different issuer", async () => {
-    const token = await new SignJWT({ email: "x@example.com" })
-      .setProtectedHeader({ alg: "RS256", kid: "test-key" })
-      .setSubject("other-team")
-      .setIssuer("https://someone-else.cloudflareaccess.com")
-      .setAudience("family-social-network")
-      .setExpirationTime("1h")
-      .sign((globalThis as any).__testPrivateKey);
-    const response = await app.fetch(
-      new Request("http://localhost:3000/api/v1/me", {
-        headers: { "Cf-Access-Jwt-Assertion": token },
-      }),
-    );
-    expect(response.status).toBe(401);
-  });
-
-  it("makes the audience optional only for Cloudflare Access", () => {
-    const access = parseEnv({
-      AUTH_PROVIDER: "cloudflare-access",
-      AUTH_ISSUER: "https://team.cloudflareaccess.com",
-    });
-    expect(access.AUTH_AUDIENCE).toBeUndefined();
-    expect(verifyOptions(access)).not.toHaveProperty("audience");
-    expect(verifyOptions(access).issuer).toBe("https://team.cloudflareaccess.com");
-
-    const pinned = parseEnv({ AUTH_PROVIDER: "cloudflare-access", AUTH_AUDIENCE: "aud-tag" });
-    expect(verifyOptions(pinned).audience).toBe("aud-tag");
-
-    const oidc = parseEnv({ AUTH_PROVIDER: "oidc", AUTH_AUDIENCE: "" });
-    expect(verifyOptions(oidc).audience).toBe("family-social-network");
-  });
-
-  it("prefers a name claim and never exposes a full email as the display name", () => {
-    expect(displayNameFromClaims({ sub: "s", name: "Meena", email: "m@example.com" })).toBe(
-      "Meena",
-    );
-    expect(displayNameFromClaims({ sub: "s", email: "meena@example.com" })).toBe("meena");
-    expect(displayNameFromClaims({ sub: "s" })).toBe("s");
-  });
-});
 
 describe("Account name", () => {
   it("lets an account set its display name", async () => {
@@ -231,7 +148,7 @@ describe("Media uploads", () => {
     const etag = res.headers.get("etag")!;
     const cached = await app.fetch(
       new Request(`http://localhost:3000/api/v1/media/${mediaId}/content`, {
-        headers: { Authorization: `Bearer ${viewer}`, "If-None-Match": etag },
+        headers: { Cookie: `auth_token=${viewer}`, "If-None-Match": etag },
       }),
     );
     expect(cached.status).toBe(304);
@@ -415,7 +332,7 @@ describe("Edge rate limiting", () => {
     };
     const res = await app.fetch(
       new Request("http://localhost:3000/api/v1/me", {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Cookie: `auth_token=${token}` },
       }),
       env,
     );

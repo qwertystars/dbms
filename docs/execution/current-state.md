@@ -4,7 +4,7 @@
 
 **Implementation complete (v1.0), plus post-v1.0 hardening and an engagement slice.**
 
-All planned backend services, web UI, database migrations, CI, and hardening are in place and verified. Recent work closed the D1 transaction gap, added a production guard for the development sign-in, made family writes D1-compatible, expanded auditing, and upgraded the feed with reactions, comments, and birthday/remembrance reminders.
+The existing v1 implementation has been updated with local username/password registration, login, and revocable cookie sessions. Full validation of this change is pending because dependency installation was unavailable in the task workspace.
 
 The frontend is a Vite + React single-page application and the backend is a standalone Hono server. The application is configured for Cloudflare Workers with D1 as the production database and R2 as the configured object-storage binding: `src/worker.ts` serves the Hono API for `/api/*` while the built SPA in `dist/` is served from the static assets binding with SPA fallback.
 
@@ -24,9 +24,8 @@ The frontend is a Vite + React single-page application and the backend is a stan
 - Foreign-key enforcement is enabled on the local libsql client (`PRAGMA foreign_keys = ON`) to match D1, which enforces foreign keys on every query.
 - Environment validation with `dotenv`, including empty-string-to-undefined handling for optional values.
 - Hono-based REST API under `/api/v1` with request context, structured logging, security headers, and rate limiting.
-- Account provisioning from the token subject. Production sign-in is Cloudflare Access (email one-time PIN or Google): the API reads `Cf-Access-Jwt-Assertion` and verifies it against the Access team JWKS and issuer, plus the audience when `AUTH_AUDIENCE` is set (ADR-004). New accounts are named from the token's `name`, else the email's local part; `PATCH /me` and a "Your name" card on the Friends page let people rename themselves.
-- Development-only cookie sign-in mounted only when `AUTH_DEV_MODE=true` (`pnpm dev:api` sets it). The route is absent otherwise, so production Workers builds cannot mint trusted tokens.
-- Cookie and Bearer token authentication for both browser UI and API clients.
+- Local username/password registration and login replace provider account provisioning. New usernames are case-insensitive; password hashes and opaque seven-day sessions are stored in SQLite/D1. Account display-name editing remains available.
+- HttpOnly cookie sessions resolve existing Accounts; external headers and Bearer JWTs are ignored.
 - Family CRUD, member role management (CREATOR/EDITOR/VIEWER), invitations, ownership transfer, and soft delete.
 - Person profile CRUD with validation, life dates, contact/occupation/biography fields, and profile photo references. Person deletion soft-deletes the row and detaches parent-child edges and membership links in one atomic batch.
 - Family tree graph with explicit parent-child edges, cycle detection, self-edge rejection, and tree projection.
@@ -48,7 +47,7 @@ The frontend is a Vite + React single-page application and the backend is a stan
   - D1 database binding (`DB`)
   - R2 media bucket binding (`MEDIA_BUCKET`)
   - `wrangler.jsonc` for the `banyan` Worker with real resource IDs, `run_worker_first: ["/api/*"]`, `not_found_handling: "single-page-application"`, `preview_urls: false`, and the `RATE_LIMITER` binding. There is no staging environment.
-  - `pnpm preview:cloudflare` builds the SPA and runs the real Workers runtime (`wrangler dev`) with local D1/R2 bindings and the development sign-in enabled (`AUTH_DEV_MODE=true`)
+  - `pnpm preview:cloudflare` uses the same local password login as production.
   - `.dev.vars.example` documents optional local Worker variables; `.dev.vars` is gitignored
   - `wrangler types` generated worker types
 
@@ -59,7 +58,7 @@ The frontend is a Vite + React single-page application and the backend is a stan
 ## Partially implemented capabilities
 
 - Post attachments and account avatars can be uploaded through the API, but the UI only uploads person profile photos.
-- Cloudflare deployment: the D1 database `banyan-db` and R2 bucket `banyan-media` exist on the Cloudflare account (created 2026-09-23). `AUTH_AUDIENCE` is optional and not set in `wrangler.jsonc`, so the API checks Access tokens by team signature and issuer only. Migrations have not been applied to the remote database, and the Worker has not been deployed.
+- Deployment of the local-login change and remote migration 0001 have not been performed. The existing Cloudflare Access application must be disabled separately. Existing provider accounts require a separately verified credential migration.
 
 Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF export, external import, AI) remain intentionally out of scope per the plan.
 
@@ -76,7 +75,7 @@ Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF
 
 - `src/routes/v1.ts` exposes the v1 REST routes.
 - Hono app mounted under `/api/v1` in `src/lib/hono.ts`.
-- `src/server/app.ts` composes the root server: mounts the v1 API and hosts `/api/auth/logout`, plus `/api/auth/login` only when `AUTH_DEV_MODE=true`.
+- `src/server/app.ts` mounts the v1 API and the local registration, login and logout routes with a request-scoped database, origin checks and sign-in rate limiting.
 - `src/server/index.ts` is the Node entry (`@hono/node-server`): serves the API, serves `dist/` statics, and falls back to `index.html` for client-side routes.
 - `src/worker.ts` is the Cloudflare Workers entry: `/api/*` → Hono; other paths → `env.ASSETS`.
 - Request-scoped D1 client via `c.env.DB` in Cloudflare and `DATABASE_URL` (libsql) fallback locally.
@@ -100,15 +99,14 @@ Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF
 
 ## Authentication
 
-- `src/lib/auth.ts` verifies RS256 JWTs against a remote JWKS (`jose` `createRemoteJWKSet`: cached for 10 minutes and refetched on an unknown `kid`, so key rotation needs no restart) or an inline `AUTH_JWKS`.
-- `src/lib/dev-auth.ts` generates a dev RSA key pair and signs tokens. Both the login route and `signDevToken` refuse to run unless `AUTH_DEV_MODE=true`.
+- `src/lib/auth.ts` hashes passwords, verifies credentials, creates/resolves seven-day cookie sessions, and revokes sessions on logout.
 - `src/lib/hono.ts` extracts tokens from `Authorization` header and the `auth_token` cookie.
 
 ## Infrastructure and deployment
 
-- `wrangler.jsonc` declares the D1 `DB` binding, `MEDIA_BUCKET` R2 binding, the static assets binding (`dist/`, SPA fallback, `run_worker_first` for `/api/*`), and the `RATE_LIMITER` rate limit binding. Production `vars` point auth at Cloudflare Access.
+- `wrangler.jsonc` declares the D1 `DB` binding, `MEDIA_BUCKET` R2 binding, the static assets binding (`dist/`, SPA fallback, `run_worker_first` for `/api/*`), and the `RATE_LIMITER` rate limit binding. Production vars no longer configure an external auth provider.
 - The Worker bundle does not depend on Node-only modules beyond the `nodejs_compat` polyfill: token hashing uses Web Crypto (`crypto.subtle`/`getRandomValues`), and `dotenv` is imported only by the Node entry (`src/server/index.ts`). `node:async_hooks` is provided by `nodejs_compat`.
-- `.env.example` documents `DATABASE_URL`, `APP_BASE_URL`, `PORT`, and auth settings including `AUTH_PROVIDER` and `AUTH_DEV_MODE`. The unused S3 `OBJECT_STORAGE_*` settings were removed.
+- `.env.example` documents `DATABASE_URL`, `APP_BASE_URL`, and `PORT`; external auth settings are removed.
 - `.github/workflows/ci.yml` runs format, lint, type-check, migration generation, migration drift check, migration application to a local SQLite file, `vite build` + `wrangler deploy --dry-run`, and tests.
 
 ## Tests
@@ -117,7 +115,7 @@ Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF
 - 50 tests across 5 files.
 - Covers family lifecycle, invitations, role authorization, cross-family isolation, tree cycles/self-edges, expired/duplicate invitations, and friendship-without-family-access.
 - Also covers Viewer posting/export, whole-family and depth-limited tree projections, tree query validation, friend requests to unknown accounts, friend display names, and mutual friend requests.
-- New hardening coverage: development sign-in is absent and cannot mint tokens when disabled, a single-use invitation accepts exactly one account (including two concurrent acceptances), person deletion soft-deletes and detaches relationships, ownership transfer swaps roles, exports are audited, and sensitive mutations write audit events.
+- Hardening tests cover password-required login, invitation single-use, deletion, ownership transfer and mutation audits. New login tests cover registration, invalid credentials, duplicate usernames, forged/expired sessions, logout revocation, HTTPS cookies, origin checks and edge rate limiting; these have not been run in this workspace.
 - Cloudflare coverage: Access header sign-in and forged-token rejection, display names from claims, `PATCH /me`, media upload/read/complete including non-member, friend, viewer and non-owner negative cases, metadata stripping for JPEG/PNG/WebP, and the rate limit binding.
 - New engagement coverage: feed author names, reaction counts, comment counts and current-account reaction; reaction toggling; same-second cursor pagination; upcoming birthdays and memorials.
 
@@ -148,3 +146,7 @@ None required for v1.0. Optional follow-ups:
 - Add coverage thresholds to CI (migration drift is already checked).
 
 After any implementation work, update this file with factual status.
+
+## Local login validation status
+
+Migration 0001 was validated with Python SQLite against migration 0000, including foreign keys and cascade deletion. The password derivation function was compared with Node PBKDF2 and checked for different passwords and salts. Type-check, formatter, lint, Vitest and build could not run because dependencies could not be installed. Prior verification claims elsewhere in this document describe earlier work, not the new login change.

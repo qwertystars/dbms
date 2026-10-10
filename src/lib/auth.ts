@@ -1,85 +1,64 @@
-import {
-  createLocalJWKSet,
-  createRemoteJWKSet,
-  jwtVerify,
-  type JSONWebKeySet,
-  type JWTPayload,
-  type KeyLike,
-} from "jose";
-import { env, type Env } from "~/lib/env";
+import { and, eq, gt } from "drizzle-orm";
+import { db } from "~/lib/db";
+import { accountCredentials, accountSessions } from "~/db/schema";
+import { hashToken, randomToken } from "~/lib/crypto";
+import { getAccountById } from "~/modules/accounts/service";
+import { AppError } from "~/lib/errors";
 
-export interface AuthContext {
-  accountId: string;
-  authSubject: string;
-  displayName: string;
+const iterations = 100_000;
+
+export async function passwordHash(password: string, salt: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(password),
+    "PBKDF2",
+    false,
+    ["deriveBits"],
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", salt: new TextEncoder().encode(salt), iterations, hash: "SHA-256" },
+    key,
+    256,
+  );
+  return Array.from(new Uint8Array(bits), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-type KeyResolver = ReturnType<typeof createRemoteJWKSet> | ReturnType<typeof createLocalJWKSet>;
-
-// Keys registered by the development sign-in (src/lib/dev-auth.ts).
-let devKeys: KeyLike[] | undefined;
-let resolver: KeyResolver | undefined;
-
-export function setCachedJWKs(keys: KeyLike[]) {
-  devKeys = keys;
-}
-
-// A remote JWKS (for example Cloudflare Access's /cdn-cgi/access/certs) is cached
-// by jose and refetched when a token carries an unknown `kid` or the cache ages
-// out, so provider key rotation does not need a restart.
-function getResolver(): KeyResolver | undefined {
-  if (resolver) return resolver;
-  const jwksUri = env.AUTH_JWKS_URI || process.env.AUTH_JWKS_URI;
-  if (jwksUri) {
-    resolver = createRemoteJWKSet(new URL(jwksUri), { cacheMaxAge: 10 * 60_000 });
-    return resolver;
+export async function login(username: string, password: string) {
+  const credentials = await db.query.accountCredentials.findFirst({
+    where: eq(accountCredentials.username, username.toLowerCase()),
+  });
+  const candidate = await passwordHash(password, credentials?.salt ?? "missing-account");
+  let difference = 0;
+  const expected = credentials?.passwordHash ?? "0".repeat(64);
+  for (let i = 0; i < expected.length; i++) {
+    difference |= candidate.charCodeAt(i) ^ expected.charCodeAt(i);
   }
-  const jwks = process.env.AUTH_JWKS || env.AUTH_JWKS;
-  if (jwks) {
-    resolver = createLocalJWKSet(JSON.parse(jwks) as JSONWebKeySet);
-    return resolver;
+  if (!credentials || difference !== 0) {
+    throw new AppError("UNAUTHORIZED", "Invalid username or password.", 401);
   }
-  return undefined;
+  return createSession(credentials.accountId);
 }
 
-// The audience is checked only when AUTH_AUDIENCE is set. Behind Cloudflare
-// Access it may be left out, and then the signature and issuer (the team
-// domain) are what tie a token to this deployment.
-export function verifyOptions(config: Pick<Env, "AUTH_ISSUER" | "AUTH_AUDIENCE">) {
-  return {
-    issuer: config.AUTH_ISSUER,
-    algorithms: ["RS256"],
-    ...(config.AUTH_AUDIENCE ? { audience: config.AUTH_AUDIENCE } : {}),
-  };
+export async function createSession(accountId: string) {
+  const token = randomToken();
+  await db.insert(accountSessions).values({
+    tokenHash: await hashToken(token),
+    accountId,
+    expiresAt: new Date(Date.now() + 7 * 86400_000),
+  });
+  return token;
 }
 
-export async function verifyAccessToken(token: string): Promise<JWTPayload> {
-  const options = verifyOptions(env);
-
-  if (devKeys) {
-    for (const key of devKeys) {
-      try {
-        const { payload } = await jwtVerify(token, key, options);
-        return payload;
-      } catch {
-        // try the next key, then the configured provider
-      }
-    }
-  }
-
-  const keys = getResolver();
-  if (!keys) throw new Error("No JWKS configured");
-  const { payload } = await jwtVerify(token, keys, options);
-  return payload;
+export async function accountFromSession(token: string) {
+  const session = await db.query.accountSessions.findFirst({
+    where: and(
+      eq(accountSessions.tokenHash, await hashToken(token)),
+      gt(accountSessions.expiresAt, new Date()),
+    ),
+  });
+  return session ? getAccountById(session.accountId) : undefined;
 }
 
-// Display name for a newly provisioned account. Cloudflare Access tokens carry
-// an email but no name, so fall back to the email's local part rather than
-// showing a full address to other family members.
-export function displayNameFromClaims(payload: JWTPayload): string {
-  if (typeof payload.name === "string" && payload.name.trim() !== "") return payload.name.trim();
-  if (typeof payload.email === "string" && payload.email.includes("@")) {
-    return payload.email.split("@")[0];
-  }
-  return payload.sub ?? "Member";
+export async function revokeSession(token: string) {
+  await db.delete(accountSessions).where(eq(accountSessions.tokenHash, await hashToken(token)));
 }

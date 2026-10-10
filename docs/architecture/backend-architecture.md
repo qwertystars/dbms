@@ -16,7 +16,7 @@ Target stack:
 - Zod schemas for request/response validation
 - generated OpenAPI from the API contract layer where practical
 - S3-compatible object storage or Cloudflare R2 for media
-- OIDC/OAuth-capable authentication integration
+- Local username/password login with opaque cookie sessions
 
 Exact hosting vendor is intentionally not part of domain semantics.
 
@@ -266,7 +266,7 @@ Secrets are environment-provided and never committed.
 Expected categories:
 
 - database URL
-- auth/OIDC secrets
+- local credential hashes and session-token hashes
 - object-storage credentials
 - application base URL
 - optional email provider credentials

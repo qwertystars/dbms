@@ -253,3 +253,11 @@ Destructive migrations require:
 - compatibility assessment
 - backup/rollback plan
 - deployment sequencing notes
+
+## Local login persistence
+
+`account_credentials`: account_id (primary key, Accounts FK, cascade delete), username (unique lowercase), password_hash (PBKDF2-SHA-256), salt (random).
+
+`account_sessions`: token_hash (SHA-256, primary key), account_id (Accounts FK, cascade delete), expires_at (Unix seconds, seven-day lifetime).
+
+These tables are introduced by migration 0001. The existing auth_subject remains a unique internal legacy identifier; local registration generates an opaque local subject and does not match usernames to legacy accounts.

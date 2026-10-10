@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "concurrently -k -n api,web \"pnpm run dev:api\" \"pnpm run dev:web\"",
-    "dev:api": "AUTH_DEV_MODE=true tsx watch src/server/index.ts",
+    "dev:api": "tsx watch src/server/index.ts",
     "dev:web": "vite",
     "build": "vite build",
     "start": "NODE_ENV=production tsx src/server/index.ts",
@@ -22,7 +22,7 @@
     "db:apply:cloudflare": "wrangler d1 migrations apply banyan-db --remote",
     "build:cloudflare": "vite build && wrangler deploy --dry-run --outdir .wrangler/dry-run",
     "deploy:cloudflare": "vite build && wrangler deploy",
-    "preview:cloudflare": "vite build && wrangler dev --var AUTH_DEV_MODE:true",
+    "preview:cloudflare": "vite build && wrangler dev",
     "wrangler:types": "wrangler types"
   },
   "dependencies": {
@@ -33,7 +33,6 @@
     "drizzle-orm": "0.30.9",
     "drizzle-zod": "0.5.1",
     "hono": "4.4.6",
-    "jose": "5.2.4",
     "nanoid": "5.0.7",
     "react": "19.2.8",
     "react-dom": "19.2.8",

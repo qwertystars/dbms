@@ -393,16 +393,12 @@ account and returns it.
 
 ## Authentication routes (outside `/api/v1`)
 
-- `GET /api/auth/config` returns `{ provider: "oidc" | "cloudflare-access", devSignIn }` for the
-  sign-in page.
-- `POST /api/auth/logout` clears the development cookie and redirects to `/sign-in`, or to
-  `/cdn-cgi/access/logout` when `AUTH_PROVIDER=cloudflare-access` (and dev sign-in is off).
-- `POST /api/auth/login` exists only when `AUTH_DEV_MODE=true`.
+- `POST /api/auth/register`: JSON `{ username, password }`; creates a local account and returns `201 { ok: true }` with an HttpOnly session cookie. Duplicate username: `409`.
+- `POST /api/auth/login`: same JSON input; returns `200 { ok: true }` with a new session cookie. Invalid credentials: `401` with the same message for wrong passwords and unknown usernames.
+- `POST /api/auth/logout`: revokes the current session, clears the cookie, and redirects to `/sign-in`.
 
-Tokens are accepted from the `Cf-Access-Jwt-Assertion` header (Cloudflare Access), an
-`Authorization: Bearer` header, or the development `auth_token` cookie. All are RS256 JWTs
-checked against the configured JWKS and issuer, and against the audience when one is
-configured (`AUTH_AUDIENCE` is optional with Cloudflare Access).
+Username: 3–40 ASCII letters, numbers, underscores or hyphens, normalized to lowercase. Password: 8–128 characters, preserved exactly. Invalid input: `400`. Cross-origin POST: `403`. Rate-limited login/registration: `429`.
+Sessions last seven days and are accepted only through the `auth_token` cookie. Cloudflare Access headers, Bearer JWTs, the auth-config endpoint and development subject-only login have been removed.
 
 ## HTTP semantics
 

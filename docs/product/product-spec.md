@@ -6,6 +6,10 @@ The product is a private family-oriented social network. Its core object is a **
 
 The product must support historical family records as well as active users. A family-tree person is therefore not equivalent to a login account.
 
+## Sign-in
+
+Users create an account with a unique username and password, then sign in with those credentials. No email code, Google login, OIDC provider or Cloudflare Access setup is required. Signing out revokes the current session. Family membership and roles still determine access to private data.
+
 ## Actors
 
 ### Guest

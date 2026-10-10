@@ -1,6 +1,6 @@
 # ADR-004 — Cloudflare Access for production sign-in
 
-Status: Accepted
+Status: Superseded by ADR-005
 
 ## Context
 

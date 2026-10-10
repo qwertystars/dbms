@@ -34,21 +34,11 @@ The browser never talks to object storage. Uploads and reads go through the Work
 (`/api/v1/media/{id}/content`), which uses the private R2 binding; no storage credentials
 exist outside Cloudflare.
 
-### Authentication provider -> application
+### Local credentials and sessions
 
-Authenticated subject claims are mapped to an internal Account.
+Users create local accounts with a unique, lowercase username and password. Passwords are stored as salted PBKDF2-SHA-256 hashes (100,000 iterations), never plaintext. Sessions use random 256-bit tokens; only SHA-256 token hashes are persisted. Cookies are HttpOnly, SameSite=Lax, Secure on HTTPS, and expire after seven days. Logout deletes the session. Login and registration are rate-limited and reject cross-origin POSTs.
 
-In production, Cloudflare Access (team `qwertystars`) signs people in with an email one-time
-PIN or Google before any request reaches the Worker, and forwards a signed JWT in
-`Cf-Access-Jwt-Assertion`. The API does not trust Access blindly: it verifies that token's
-RS256 signature against the team JWKS (cached, refetched on unknown `kid`) and the issuer, plus
-the audience (the Access application's AUD tag) when `AUTH_AUDIENCE` is set. Without the
-audience, a token from any Access application in the team is accepted, so the team's Access
-policies decide who can sign in. A request that bypasses Access therefore has no
-valid token and is treated as anonymous. Access only proves an email address; family access
-is still decided by memberships. See ADR-004.
-
-Do not trust mutable display information as identity.
+External identity headers and bearer tokens are not accepted. Family permissions continue to use the immutable internal Account ID, never username or display name. Existing provider accounts are preserved but have no local credentials; linking or migrating their credentials requires a separate verified administrative process. Creating a matching username cannot claim their private data.
 
 ## Authorization
 

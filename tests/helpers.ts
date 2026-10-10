@@ -1,25 +1,16 @@
-import { SignJWT } from "jose";
 import { app } from "~/lib/hono";
+import { createSession } from "~/lib/auth";
+import { getOrCreateAccount } from "~/modules/accounts/service";
 import "~/routes/v1";
 
 export async function getTestToken(authSubject: string, displayName = "Test User") {
-  const privateKey = (globalThis as any).__testPrivateKey;
-  if (!privateKey) throw new Error("Test keys not initialized");
-  return await new SignJWT({
-    sub: authSubject,
-    name: displayName,
-  })
-    .setProtectedHeader({ alg: "RS256", kid: "test-key" })
-    .setIssuer("http://localhost:3000")
-    .setAudience("family-social-network")
-    .setIssuedAt()
-    .setExpirationTime("2h")
-    .sign(privateKey);
+  const account = await getOrCreateAccount(authSubject, displayName);
+  return createSession(account.id);
 }
 
 export async function apiRequest(method: string, path: string, body?: unknown, token?: string) {
   const headers: Record<string, string> = {};
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+  if (token) headers["Cookie"] = `auth_token=${token}`;
   if (body) headers["Content-Type"] = "application/json";
 
   const url = `http://localhost:3000${path}`;

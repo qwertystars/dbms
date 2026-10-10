@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { RequestContext } from "~/lib/context";
-import { getOrCreateAccount } from "~/modules/accounts/service";
-import { displayNameFromClaims, verifyAccessToken } from "~/lib/auth";
+import { accountFromSession } from "~/lib/auth";
+import { getCookie } from "hono/cookie";
 import { localObjectStore, type ObjectStore } from "~/lib/object-store";
 import { createDb } from "~/lib/db";
 import { env } from "~/lib/env";
@@ -62,35 +62,9 @@ app.use(async (c, next) => {
   await runWithContext(ctx, next);
 });
 
-function extractToken(c: any): string | undefined {
-  // Cloudflare Access puts its signed identity token on every request it lets through.
-  const accessToken = c.req.header("cf-access-jwt-assertion");
-  if (accessToken) return accessToken;
-  const authHeader = c.req.header("authorization");
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    return authHeader.slice(7);
-  }
-  const cookieHeader = c.req.header("cookie") || "";
-  const match = cookieHeader.match(/(?:^|;\s*)auth_token=([^;]+)/);
-  if (match) {
-    return decodeURIComponent(match[1]);
-  }
-  return undefined;
-}
-
 app.use(async (c, next) => {
-  const token = extractToken(c);
-  if (token) {
-    try {
-      const payload = await verifyAccessToken(token);
-      const subject = payload.sub;
-      if (!subject) throw new Error("Missing subject");
-      const account = await getOrCreateAccount(subject, displayNameFromClaims(payload));
-      c.get("ctx").account = account;
-    } catch (e) {
-      // intentionally ignored; route handlers enforce auth
-    }
-  }
+  const token = getCookie(c, "auth_token");
+  if (token) c.get("ctx").account = await accountFromSession(token);
   await next();
 });
 

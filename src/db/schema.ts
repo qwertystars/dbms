@@ -40,6 +40,23 @@ export const accounts = sqliteTable("accounts", {
     .$defaultFn(() => new Date()),
 });
 
+export const accountCredentials = sqliteTable("account_credentials", {
+  accountId: text("account_id")
+    .primaryKey()
+    .references(() => accounts.id, { onDelete: "cascade" }),
+  username: text("username").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  salt: text("salt").notNull(),
+});
+
+export const accountSessions = sqliteTable("account_sessions", {
+  tokenHash: text("token_hash").primaryKey(),
+  accountId: text("account_id")
+    .notNull()
+    .references(() => accounts.id, { onDelete: "cascade" }),
+  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+});
+
 export const families = sqliteTable("families", {
   id: text("id")
     .primaryKey()

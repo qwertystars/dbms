@@ -4,9 +4,6 @@
   "main": "src/worker.ts",
   "compatibility_date": "2026-09-05",
   "compatibility_flags": ["nodejs_compat"],
-  // Cloudflare Access protects banyan.srijan-guchhait.workers.dev. Version
-  // preview URLs are a different hostname that Access does not cover, so they
-  // stay off. The API verifies the Access token itself either way.
   "workers_dev": true,
   "preview_urls": false,
   "assets": {
@@ -21,12 +18,6 @@
   },
   "vars": {
     "APP_BASE_URL": "https://banyan.srijan-guchhait.workers.dev",
-    // Sign-in is Cloudflare Access for the qwertystars team. Tokens are checked
-    // against the team's keys and issuer. AUTH_AUDIENCE (the Access
-    // application's AUD tag) is optional; set it to accept only this app's tokens.
-    "AUTH_PROVIDER": "cloudflare-access",
-    "AUTH_ISSUER": "https://qwertystars.cloudflareaccess.com",
-    "AUTH_JWKS_URI": "https://qwertystars.cloudflareaccess.com/cdn-cgi/access/certs",
   },
   "d1_databases": [
     {
