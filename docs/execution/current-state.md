@@ -134,7 +134,7 @@ Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF
 
 ## Next required implementation step
 
-Required for the Google OAuth rollout: push the feature branch and verify the Cloudflare Git integration deploys the new Worker. Optional follow-ups:
+Google OAuth is deployed to production via Cloudflare Git integration. Optional follow-ups:
 
 - Add controls for existing API features not yet in the UI: removing relationships, ownership transfer, and family editing/deletion.
 - Add e2e tests (Playwright/Cypress).
@@ -152,8 +152,8 @@ subjects, distinct from family-tree people. Email never grants or links family
 access. Sessions expire after seven days. New migrations add `oauth_attempts`
 and `auth_sessions`. Both migrations were applied successfully to remote
 `banyan-db` on October 11. The owner reports the old Access gate removed.
-Deployment through the Cloudflare Git integration remains pending;
-this change has not yet been deployed.
+Deployment through the Cloudflare Git integration succeeded. The live auth
+config reports `provider: google`, `devSignIn: false`, `googleSignIn: true`.
 
 Verification for this change: 55 tests across seven files passed; TypeScript,
 ESLint, frontend build and Wrangler deployment dry-run passed. No live Google
@@ -174,3 +174,9 @@ script allowlist. The package-manager version is pinned to match Cloudflare.
 
 Verified the corrected workspace with the exact Cloudflare installer:
 `CI=true corepack pnpm@10.11.1 install --frozen-lockfile` completed successfully.
+
+Production deployment verified after pushing integrated main commit 3e3ce11:
+active Worker version `4e52bfcb-679b-4b2a-ad4e-9b8e61bd496a`. Google sign-in
+configuration is live; a complete interactive Google sign-in remains untested.
+GitHub CI’s duplicate pnpm version setting was removed so action-setup reads
+the pinned packageManager version from package.json.
