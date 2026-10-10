@@ -144,3 +144,10 @@ After deployment verify:
 - create and delete a test post in staging
 - authorization negative check
 - media access
+
+## Build toolchain
+
+Use pnpm 10.11.1 (pinned in package.json). The workspace lists the root package
+and uses pnpm 10’s `onlyBuiltDependencies` for required install scripts.
+Cloudflare installs with `pnpm install --frozen-lockfile`. An `allowBuilds`-only
+workspace without `packages` fails on this pnpm version.

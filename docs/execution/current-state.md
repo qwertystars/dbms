@@ -166,3 +166,11 @@ application was performed in this credential-setup step.
 The remote migration command applied `0000_calm_talon.sql` and
 `0001_busy_stepford_cuckoos.sql` successfully. No direct Worker deployment was
 performed; the owner uses Cloudflare Git integration for deployment.
+
+Cloudflare bot build for commit 3726a00 failed before compilation: pnpm
+10.11.1 rejected pnpm-workspace.yaml because it lacked `packages`. The
+workspace now explicitly lists the root package and uses pnpm 10’s install
+script allowlist. The package-manager version is pinned to match Cloudflare.
+
+Verified the corrected workspace with the exact Cloudflare installer:
+`CI=true corepack pnpm@10.11.1 install --frozen-lockfile` completed successfully.
