@@ -1,15 +1,18 @@
 import { Hono } from "hono";
-import { deleteCookie, setCookie } from "hono/cookie";
+import { setCookie } from "hono/cookie";
 import { apiErrorHandler, apiNotFoundHandler, app as api } from "~/lib/hono";
 import { signDevToken } from "~/lib/dev-auth";
 import { env } from "~/lib/env";
 import "~/routes/v1";
+import { authConfigSchema } from "~/lib/schemas";
+import { googleAuth, safeReturnTo } from "~/lib/google-auth";
 
 export const server = new Hono();
 
 // Mount the v1 API. The sub-app already carries the "/api/v1" base path
 // and its own middleware stack (context, auth, rate limiting, logging).
 server.route("/", api);
+server.route("/", googleAuth);
 
 // Development-only cookie sign-in. It is mounted only when AUTH_DEV_MODE is
 // explicitly "true" (pnpm dev:api sets it), so production Workers builds never
@@ -25,12 +28,7 @@ if (env.AUTH_DEV_MODE === "true") {
     if (!subject) {
       return c.json({ error: "Subject is required" }, 400);
     }
-    const returnTo =
-      typeof form.returnTo === "string" &&
-      form.returnTo.startsWith("/") &&
-      !form.returnTo.startsWith("//")
-        ? form.returnTo
-        : "/app";
+    const returnTo = safeReturnTo(typeof form.returnTo === "string" ? form.returnTo : undefined);
     const token = await signDevToken(subject, displayName);
     setCookie(c, "auth_token", token, {
       httpOnly: true,
@@ -45,19 +43,15 @@ if (env.AUTH_DEV_MODE === "true") {
 
 // Tells the sign-in page which flow to show.
 server.get("/api/auth/config", (c) =>
-  c.json({
-    provider: env.AUTH_PROVIDER,
-    devSignIn: env.AUTH_DEV_MODE === "true",
-    clerkPublishableKey: env.AUTH_PROVIDER === "clerk" ? env.CLERK_PUBLISHABLE_KEY ?? null : null,
-  }),
+  c.json(
+    authConfigSchema.parse({
+      provider: env.AUTH_PROVIDER,
+      devSignIn: env.AUTH_DEV_MODE === "true",
+      googleSignIn:
+        env.AUTH_PROVIDER === "google" && Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
+    }),
+  ),
 );
-
-// Ends the development sign-in. Clerk sessions are ended in the browser by
-// Clerk's signOut(), which also revokes the session on Clerk's side.
-server.post("/api/auth/logout", (c) => {
-  deleteCookie(c, "auth_token", { path: "/" });
-  return c.redirect("/sign-in");
-});
 
 server.onError(apiErrorHandler);
 server.notFound(apiNotFoundHandler);

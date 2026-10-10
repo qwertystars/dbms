@@ -94,3 +94,9 @@ export const uploadCompleteSchema = z.object({
 export const accountUpdateSchema = z.object({
   displayName: z.string().trim().min(1).max(120),
 });
+
+export const authConfigSchema = z.object({
+  provider: z.enum(["oidc", "google"]),
+  devSignIn: z.boolean(),
+  googleSignIn: z.boolean(),
+});

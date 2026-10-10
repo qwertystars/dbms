@@ -1,94 +1,38 @@
 # Deployment
 
-## Target topology
+Banyan runs on Cloudflare Workers with D1, R2 and the rate limiter binding.
+Direct Google OAuth replaces Clerk and Cloudflare Access.
 
-```text
-Browser
-  |
-HTTPS
-  |
-Cloudflare Worker "banyan" (Hono API + Vite SPA static assets)  <-- verifies Clerk tokens
-  |
-  |------------------|------------------|------------------|
-Cloudflare D1      Cloudflare R2      Workers rate limiting   Clerk (sign-in, JWKS,
-(banyan-db)        (banyan-media)     (RATE_LIMITER)          Backend API for names)
-```
+## Google setup
 
-The browser loads Clerk's JavaScript from the Clerk instance's Frontend API.
+Create a Google OAuth client of type **Web application**. Configure the consent
+screen and, while the app is in testing, add permitted test users. Register this
+exact authorized redirect URI:
 
-The Worker entry is `src/worker.ts`. It serves the Hono API for `/api/*` requests
-(`run_worker_first` in `wrangler.jsonc`) and delegates every other path to the static assets
-binding, which serves `dist/` with single-page-application fallback.
+`https://banyan.srijan-guchhait.workers.dev/api/auth/google/callback`
 
-Production URL: `https://banyan.srijan-guchhait.workers.dev` on the Cloudflare account
-"Srijan.guchhait@gmail.com's Account".
+Set `GOOGLE_CLIENT_ID` in `wrangler.jsonc` and store `GOOGLE_CLIENT_SECRET` using
+`pnpm exec wrangler secret put GOOGLE_CLIENT_SECRET`. Do not commit the secret.
+`AUTH_PROVIDER` must be `google`; `APP_BASE_URL` must match the live origin.
+For Node/local Google testing, put the same variables in `.env` and register the
+local callback origin too. The development sign-in remains opt-in.
 
-## Resources
+## Rollout
 
-| Resource           | Name / value                                          |
-| ------------------ | ----------------------------------------------------- |
-| Worker             | `banyan`                                              |
-| D1 database        | `banyan-db` (`9f1b3386-bd11-493f-852d-9915821e71aa`)  |
-| R2 bucket          | `banyan-media` (private; read only through the API)   |
-| Rate limit binding | `RATE_LIMITER`, namespace `1001`, 100 requests / 60s  |
-| Clerk application  | development instance; its keys go in the settings below |
+1. Install dependencies and run checks.
+2. Apply **both** migrations with `pnpm db:apply:cloudflare`. On October 10,
+   the live `banyan-db` had no application tables, so the initial migration is required.
+3. Validate with `pnpm build:cloudflare`, then deploy with `pnpm deploy:cloudflare`.
+4. Remove the old Cloudflare Access application gate for the Banyan hostname
+   when ready to switch. Otherwise Access intercepts users before Google sign-in.
+5. Verify Google sign-in, family reads, rejected unauthorized family access,
+   logout and rejection of the revoked session.
 
-## Configuration
-
-| Setting                   | Where                          | Value                                                 |
-| ------------------------- | ------------------------------ | ----------------------------------------------------- |
-| `AUTH_PROVIDER`           | `vars`                         | `clerk`                                               |
-| `CLERK_PUBLISHABLE_KEY`   | `vars` (public)                | `pk_test_...` from Clerk → Configure → API keys       |
-| `CLERK_SECRET_KEY`        | secret (`wrangler secret put`) | `sk_test_...` from the same page                      |
-| `APP_BASE_URL`            | `vars`                         | `https://banyan.srijan-guchhait.workers.dev`          |
-| `AUTH_AUTHORIZED_PARTIES` | `vars` (optional)              | extra allowed origins; defaults to `APP_BASE_URL`'s   |
-
-The token issuer and JWKS URL are derived from the publishable key. Never set
-`AUTH_DEV_MODE` in production. When it is not `"true"` the development `/api/auth/login` route
-is not mounted, so only Clerk tokens are accepted.
-
-## First-time setup
-
-1. Create the D1 database and R2 bucket (done; IDs above).
-2. Create a Clerk application at dashboard.clerk.com and choose its sign-in methods (for
-   example email code, phone code and Google). In its development instance, add
-   `https://banyan.srijan-guchhait.workers.dev` under allowed origins if Clerk asks for it.
-3. Put the publishable key in `CLERK_PUBLISHABLE_KEY` in `wrangler.jsonc`.
-4. Sign wrangler in and store the secret key:
-
-   ```bash
-   pnpm exec wrangler login
-   pnpm exec wrangler secret put CLERK_SECRET_KEY
-   ```
-
-5. Apply migrations and deploy:
-
-   ```bash
-   pnpm db:apply:cloudflare
-   pnpm deploy:cloudflare
-   ```
-
-### Moving to a Clerk production instance
-
-A development instance (`pk_test_`) works on `workers.dev` but shows a development banner.
-A production instance (`pk_live_`) needs a domain you control: add it in Clerk, create the DNS
-records Clerk lists, attach the same domain to the Worker as a custom domain, then update
-`APP_BASE_URL`, `CLERK_PUBLISHABLE_KEY` and the `CLERK_SECRET_KEY` secret.
-
-## Routine deploys
-
-```bash
-pnpm build:cloudflare      # vite build + wrangler deploy --dry-run
-pnpm db:apply:cloudflare   # only when db/migrations changed
-pnpm deploy:cloudflare
-```
-
-## Staging
-
-There is no staging environment yet. To add one, create `banyan-db-staging` and
-`banyan-media-staging`, add an `env.staging` block to `wrangler.jsonc` with its own bindings,
-its own `APP_BASE_URL`, and a separate Clerk instance or application. Production must never
-share its database or bucket with staging.
+The repository config now selects account `ee4c08f37c3a62fedc87fbd1b8b96ff4`
+and Worker `banyan`. Deployment does not apply migrations automatically.
+No existing Clerk or Access account is linked by email; Google subjects use the
+`google:` prefix. Existing account migration needs an explicit verified linking
+process if data is imported later.
 
 ## Local development
 

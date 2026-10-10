@@ -1,9 +1,8 @@
-import { SignIn, SignUp } from "@clerk/react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "~/client/auth";
 import { Brand } from "~/client/components/AppLayout";
 import { Field } from "~/client/components/ui";
-import { useAuthConfig, useSession } from "~/client/session";
+import { useAuthConfig } from "~/client/session";
 
 // Only allow same-site paths, mirroring the server-side check.
 function useReturnTo() {
@@ -20,39 +19,13 @@ export function SignUpPage() {
   return <AuthPage mode="sign-up" />;
 }
 
-function AuthPage({ mode }: { mode: "sign-in" | "sign-up" }) {
+function AuthPage(_props: { mode: "sign-in" | "sign-up" }) {
   const { status } = useAuth();
   const config = useAuthConfig();
-  const session = useSession();
   const returnTo = useReturnTo();
+  const [params] = useSearchParams();
 
   if (status === "authed") return <Navigate to={returnTo} replace />;
-
-  if (session.mode === "clerk") {
-    const query = `?returnTo=${encodeURIComponent(returnTo)}`;
-    return (
-      <main className="center-screen">
-        <div className="auth-card auth-card-clerk">
-          <Brand />
-          {mode === "sign-in" ? (
-            <SignIn
-              routing="hash"
-              signUpUrl={`/sign-up${query}`}
-              forceRedirectUrl={returnTo}
-              signUpForceRedirectUrl={returnTo}
-            />
-          ) : (
-            <SignUp
-              routing="hash"
-              signInUrl={`/sign-in${query}`}
-              forceRedirectUrl={returnTo}
-              signInForceRedirectUrl={returnTo}
-            />
-          )}
-        </div>
-      </main>
-    );
-  }
 
   return (
     <main className="center-screen">
@@ -61,6 +34,22 @@ function AuthPage({ mode }: { mode: "sign-in" | "sign-up" }) {
         <div className="card card-body stack">
           {config.devSignIn ? (
             <DevSignIn returnTo={returnTo} />
+          ) : config.googleSignIn ? (
+            <div className="stack">
+              <h1>Sign in</h1>
+              {params.get("error") === "google" && (
+                <p role="alert">Google sign-in failed or was cancelled. Please try again.</p>
+              )}
+              <a
+                className="btn btn-primary btn-block"
+                href={`/api/auth/google?returnTo=${encodeURIComponent(returnTo)}`}
+              >
+                Continue with Google
+              </a>
+              <p className="muted">
+                Your Google account identifies you. Family access requires an invitation.
+              </p>
+            </div>
           ) : (
             <div>
               <h1 style={{ fontSize: "1.5rem" }}>Sign-in isn&rsquo;t set up</h1>

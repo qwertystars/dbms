@@ -25,3 +25,5 @@ dist
 # Cloudflare / Wrangler
 .wrangler
 worker-configuration.d.ts
+
+client_secret_*.json

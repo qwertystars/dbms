@@ -5,6 +5,7 @@ import { initialDisplayName, verifyAccessToken } from "~/lib/auth";
 import { localObjectStore, type ObjectStore } from "~/lib/object-store";
 import { createDb } from "~/lib/db";
 import { env } from "~/lib/env";
+import { readSession } from "~/lib/google-auth";
 import type { D1Database } from "@cloudflare/workers-types";
 import { AppError } from "~/lib/errors";
 import { log } from "~/lib/logger";
@@ -68,18 +69,18 @@ function extractToken(c: any): string | undefined {
     return authHeader.slice(7);
   }
   const cookieHeader = c.req.header("cookie") || "";
-  // Clerk keeps the current session token in the same-origin __session cookie,
-  // which is what authenticates <img> requests for family photos.
-  for (const name of ["__session", "auth_token"]) {
-    const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`));
-    if (match) return decodeURIComponent(match[1]);
-  }
+  const match = cookieHeader.match(/(?:^|;\s*)auth_token=([^;]+)/);
+  if (match) return decodeURIComponent(match[1]);
   return undefined;
 }
 
 app.use(async (c, next) => {
   const token = extractToken(c);
-  if (token) {
+  const session = await readSession(c.req.header("cookie") ?? "", c.get("ctx").db);
+  if (session) {
+    c.get("ctx").account = await getOrCreateAccount(session.subject, session.displayName);
+  }
+  if ((token && env.AUTH_PROVIDER !== "google") || (token && env.AUTH_DEV_MODE === "true")) {
     try {
       const payload = await verifyAccessToken(token);
       const subject = payload.sub!;

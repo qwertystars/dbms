@@ -1,11 +1,11 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "banyan",
+  "account_id": "ee4c08f37c3a62fedc87fbd1b8b96ff4",
   "main": "src/worker.ts",
   "compatibility_date": "2026-09-05",
   "compatibility_flags": ["nodejs_compat"],
-  // Version preview URLs use another origin, which Clerk tokens (azp) are not
-  // minted for, so they stay off.
+  // OAuth callback URLs must be registered with Google; preview URLs stay off.
   "workers_dev": true,
   "preview_urls": false,
   "assets": {
@@ -20,11 +20,9 @@
   },
   "vars": {
     "APP_BASE_URL": "https://banyan.srijan-guchhait.workers.dev",
-    // Sign-in is Clerk. The issuer and JWKS URL are derived from the
-    // publishable key, which is public. CLERK_SECRET_KEY is a Worker secret
-    // (wrangler secret put CLERK_SECRET_KEY), used to look up new users' names.
-    "AUTH_PROVIDER": "clerk",
-    "CLERK_PUBLISHABLE_KEY": "pk_test_SET_FROM_CLERK_DASHBOARD",
+    "AUTH_PROVIDER": "google",
+    // Set GOOGLE_CLIENT_ID here and GOOGLE_CLIENT_SECRET with wrangler secret put.
+    "GOOGLE_CLIENT_ID": "226763122782-p9pre6j56cirs2egedcots6hep4vo08u.apps.googleusercontent.com",
   },
   "d1_databases": [
     {

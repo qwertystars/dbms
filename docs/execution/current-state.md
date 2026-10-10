@@ -24,7 +24,6 @@ The frontend is a Vite + React single-page application and the backend is a stan
 - Foreign-key enforcement is enabled on the local libsql client (`PRAGMA foreign_keys = ON`) to match D1, which enforces foreign keys on every query.
 - Environment validation with `dotenv`, including empty-string-to-undefined handling for optional values.
 - Hono-based REST API under `/api/v1` with request context, structured logging, security headers, and rate limiting.
-- Account provisioning from the token subject. Production sign-in is Clerk (ADR-004): `/sign-in` and `/sign-up` render Clerk's components when `GET /api/auth/config` reports Clerk, and the browser sends Clerk's session token as a Bearer header (the `__session` cookie covers image requests). The Worker verifies tokens with `jose` against the Clerk JWKS and issuer derived from `CLERK_PUBLISHABLE_KEY`, checks `azp` against the app's origin and rejects pending sessions. New accounts are named from Clerk's Backend API (`CLERK_SECRET_KEY`), else from the token claims, never with a full email; `PATCH /me` and a "Your name" card on the Friends page let people rename themselves.
 - Development-only cookie sign-in mounted only when `AUTH_DEV_MODE=true` (`pnpm dev:api` sets it). The route is absent otherwise, so production Workers builds cannot mint trusted tokens.
 - Cookie and Bearer token authentication for both browser UI and API clients.
 - Family CRUD, member role management (CREATOR/EDITOR/VIEWER), invitations, ownership transfer, and soft delete.
@@ -37,13 +36,13 @@ The frontend is a Vite + React single-page application and the backend is a stan
 - Media uploads to R2: `POST /media/upload-intents` (family membership checked; profile photos need Creator or Editor), `PUT /media/:id/content` (owner only; magic-byte type check; EXIF/XMP/text metadata stripped; stored in the `MEDIA_BUCKET` R2 binding, or an in-memory store on the Node server and in tests), `GET /media/:id/content` (family members only, `404` otherwise, private caching, ETag), and an idempotent `POST /media/:id/complete`.
 - Profile photos in the UI: Creators and Editors can add, change and remove a person's photo on the person page. The browser redraws the photo through a canvas first (applies EXIF rotation, drops metadata, caps the long edge at 1600 px, JPEG). Photos show in person, family and tree lists, and people with a death date get a pencil ring around their avatar.
 - JSON and CSV family export with audit logging.
-- Web UI (Vite + React SPA under `src/client/`, React Router): `/sign-in`, `/app` dashboard, family list, family detail, person detail, tree view, feed view, friends, and invitation acceptance. All data flows through the Hono API using the `auth_token` cookie.
+- Web UI (Vite + React SPA under `src/client/`, React Router): `/sign-in`, `/app` dashboard, family list, family detail, person detail, tree view, feed view, friends, and invitation acceptance. All data flows through the Hono API using the `banyan_session` cookie (or `auth_token` for development).
 - Feed UI: post composer, four emoji reactions with live counts, expandable comment threads with author names, edit/delete for own posts, and Creator moderation of posts and comments.
 - Person profile UI: edit form (name, gender, life dates, occupation, contact details, height, weight, biography) for Creators and Editors, and Creator-only delete with confirmation. Deletion is a soft delete that also detaches family-tree links.
 - Member management UI: Creators can change member roles between Editor and Viewer and remove members.
 - Dashboard: family cards plus a "Coming up" card showing birthdays and remembrances in the next 60 days with relative dates.
 - Hardening: request logging, 100 req/minute per-account/IP rate limiting (the Workers `RATE_LIMITER` binding on Cloudflare, shared across isolates; an in-memory fallback on Node), `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` headers.
-- Cloudflare deployment ready:
+- Cloudflare bundle configured (Google credentials and rollout pending):
   - `vite build` produces the SPA in `dist/`; `wrangler deploy` bundles `src/worker.ts` directly (the `~/*` tsconfig alias is resolved by Wrangler's bundler)
   - D1 database binding (`DB`)
   - R2 media bucket binding (`MEDIA_BUCKET`)
@@ -59,7 +58,6 @@ The frontend is a Vite + React single-page application and the backend is a stan
 ## Partially implemented capabilities
 
 - Post attachments and account avatars can be uploaded through the API, but the UI only uploads person profile photos.
-- Cloudflare deployment: the D1 database `banyan-db` and R2 bucket `banyan-media` exist on the Cloudflare account (created 2026-09-23). No Clerk application is connected yet: `CLERK_PUBLISHABLE_KEY` in `wrangler.jsonc` is a placeholder and the `CLERK_SECRET_KEY` secret is not set. The Clerk sign-in UI has not been tried against a real Clerk instance or in a browser. Also, migrations have not been applied to the remote database, and the Worker has not been deployed.
 
 Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF export, external import, AI) remain intentionally out of scope per the plan.
 
@@ -84,7 +82,7 @@ Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF
 ## Frontend
 
 - Vite + React SPA under `src/client/` with React Router: sign-in, dashboard, family list/detail, tree, feed, person, friends, invitation acceptance.
-- `src/client/api.ts` is a small `fetch` wrapper; authentication rides on the same-origin `auth_token` cookie.
+- `src/client/api.ts` is a small `fetch` wrapper; authentication rides on the same-origin `banyan_session` cookie (or `auth_token` for development).
 - `src/client/auth.tsx` provides an `AuthProvider` (`/api/v1/me`) and a `RequireAuth` guard that redirects to `/sign-in?returnTo=…`.
 - Vite dev server proxies `/api` to the Hono server on `localhost:3000`.
 - Branding (Banyan, M0 slice of `docs/product/banyan-spec.md`): brand tokens (`--bn-*`) with Notebook (light) and Slate (dark) themes, OS default plus a stored user choice (`src/client/theme.tsx`, theme toggle in the app header), Anek and Kavivanar web fonts from Google Fonts, the Banyan mark and lowercase wordmark, favicon and app icon from `public/brand/`, no all-caps labels, highlighter styling for birthdays, a neutral ring (not a candle) for remembrances, and the dot grid on the tree and empty states. Not yet done from M0: Tailwind v4, shadcn/ui, PullCord, the text-size setting UI (the `--bn-text-scale` hook exists), a kitchen-sink page, Playwright and axe in CI.
@@ -102,11 +100,10 @@ Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF
 
 - `src/lib/auth.ts` verifies RS256 JWTs against a remote JWKS (`jose` `createRemoteJWKSet`: cached for 10 minutes and refetched on an unknown `kid`, so key rotation needs no restart) or an inline `AUTH_JWKS`.
 - `src/lib/dev-auth.ts` generates a dev RSA key pair and signs tokens. Both the login route and `signDevToken` refuse to run unless `AUTH_DEV_MODE=true`.
-- `src/lib/hono.ts` extracts tokens from `Authorization` header and the `auth_token` cookie.
+- `src/lib/hono.ts` resolves the opaque `banyan_session` cookie against D1. Generic OIDC and development modes also accept Bearer JWTs or the `auth_token` cookie.
 
 ## Infrastructure and deployment
 
-- `wrangler.jsonc` declares the D1 `DB` binding, `MEDIA_BUCKET` R2 binding, the static assets binding (`dist/`, SPA fallback, `run_worker_first` for `/api/*`), and the `RATE_LIMITER` rate limit binding. Production `vars` select Clerk.
 - The Worker bundle does not depend on Node-only modules beyond the `nodejs_compat` polyfill: token hashing uses Web Crypto (`crypto.subtle`/`getRandomValues`), and `dotenv` is imported only by the Node entry (`src/server/index.ts`). `node:async_hooks` is provided by `nodejs_compat`.
 - `.env.example` documents `DATABASE_URL`, `APP_BASE_URL`, `PORT`, and auth settings including `AUTH_PROVIDER` and `AUTH_DEV_MODE`. The unused S3 `OBJECT_STORAGE_*` settings were removed.
 - `.github/workflows/ci.yml` runs format, lint, type-check, migration generation, migration drift check, migration application to a local SQLite file, `vite build` + `wrangler deploy --dry-run`, and tests.
@@ -114,11 +111,10 @@ Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF
 ## Tests
 
 - `tests/setup.ts`, `tests/helpers.ts`, `tests/family.test.ts`, `tests/authorization.test.ts`, `tests/hardening.test.ts`, `tests/engagement.test.ts`, `tests/production.test.ts`.
-- 54 tests across 5 files.
+- 55 tests across 7 files, including Google OAuth callback and session security tests.
 - Covers family lifecycle, invitations, role authorization, cross-family isolation, tree cycles/self-edges, expired/duplicate invitations, and friendship-without-family-access.
 - Also covers Viewer posting/export, whole-family and depth-limited tree projections, tree query validation, friend requests to unknown accounts, friend display names, and mutual friend requests.
 - New hardening coverage: development sign-in is absent and cannot mint tokens when disabled, a single-use invitation accepts exactly one account (including two concurrent acceptances), person deletion soft-deletes and detaches relationships, ownership transfer swaps roles, exports are audited, and sensitive mutations write audit events.
-- Production coverage: Clerk `__session` cookie sign-in, pending-session and forged-token rejection, `azp` checks, publishable-key decoding, display names from Clerk users and claims, the auth config route, `PATCH /me`, media upload/read/complete including non-member, friend, viewer and non-owner negative cases, metadata stripping for JPEG/PNG/WebP, and the rate limit binding.
 - New engagement coverage: feed author names, reaction counts, comment counts and current-account reaction; reaction toggling; same-second cursor pagination; upcoming birthdays and memorials.
 
 ## Current compatibility obligations
@@ -132,19 +128,41 @@ Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF
 - The Node server keeps uploaded media in memory, so local photos disappear on restart. `pnpm preview:cloudflare` uses a persistent local R2.
 - Replaced or removed profile photos stay in R2; nothing deletes orphaned media yet.
 - Images are not re-encoded on the server (Workers has no codec), so thumbnails and AVIF/WebP variants (spec §6.9) do not exist.
-- A Clerk development instance shows a development banner; a production Clerk instance needs a custom domain instead of `workers.dev`.
 - No e2e browser tests yet.
 - Do not put `NODE_ENV` in `.env`: Vite reads it and `vite build` then bundles development React (about 514 kB instead of 254 kB). `.env.example` documents this.
 - Dependencies (Hono 4.4.6, drizzle-orm 0.30.9, drizzle-kit 0.21.4, Vite 5) are behind current stable releases; upgrade with the test suite as a guard.
 
 ## Next required implementation step
 
-None required for v1.0. Optional follow-ups:
+Required for the Google OAuth rollout: push the feature branch and verify the Cloudflare Git integration deploys the new Worker. Optional follow-ups:
 
-- Connect a Clerk application (publishable key and secret), apply migrations to `banyan-db` and deploy (see `docs/operations/deployment.md`).
 - Add controls for existing API features not yet in the UI: removing relationships, ownership transfer, and family editing/deletion.
 - Add e2e tests (Playwright/Cypress).
 - Clean up orphaned media and add post-attachment uploads to the feed UI.
 - Add coverage thresholds to CI (migration drift is already checked).
 
 After any implementation work, update this file with factual status.
+
+## Direct Google authentication (October 11, 2026)
+
+Production sign-in uses Google's authorization-code OAuth flow with PKCE,
+state and nonce, and verified ID tokens. Banyan stores hashed opaque sessions
+in D1 and revokes them on logout. Accounts use stable `google:`-prefixed
+subjects, distinct from family-tree people. Email never grants or links family
+access. Sessions expire after seven days. New migrations add `oauth_attempts`
+and `auth_sessions`. Both migrations were applied successfully to remote
+`banyan-db` on October 11. The owner reports the old Access gate removed.
+Deployment through the Cloudflare Git integration remains pending;
+this change has not yet been deployed.
+
+Verification for this change: 55 tests across seven files passed; TypeScript,
+ESLint, frontend build and Wrangler deployment dry-run passed. No live Google
+sign-in was tested during implementation. Google credentials are now configured:
+the public client ID is in Wrangler and GOOGLE_CLIENT_SECRET is stored as a
+Worker secret. The supplied web-client JSON lists the expected callback URI
+and is excluded from Git. No application deployment or remote migration
+application was performed in this credential-setup step.
+
+The remote migration command applied `0000_calm_talon.sql` and
+`0001_busy_stepford_cuckoos.sql` successfully. No direct Worker deployment was
+performed; the owner uses Cloudflare Git integration for deployment.

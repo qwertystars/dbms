@@ -394,28 +394,17 @@ account and returns it.
 ## Authentication routes (outside `/api/v1`)
 
 - `GET /api/auth/config` returns
-  `{ provider: "oidc" | "clerk", devSignIn, clerkPublishableKey }` for the sign-in page.
-  `clerkPublishableKey` is `null` unless the provider is Clerk.
-- `POST /api/auth/logout` clears the development cookie and redirects to `/sign-in`. Clerk
-  sessions are ended in the browser with Clerk's `signOut()`.
-- `POST /api/auth/login` exists only when `AUTH_DEV_MODE=true`.
+  `{ provider: "oidc" | "google", devSignIn: boolean, googleSignIn: boolean }`.
+- `GET /api/auth/google?returnTo=...` starts Google authorization with PKCE,
+  state and nonce; sets a 10-minute HttpOnly OAuth cookie. Unconfigured: 503.
+- `GET /api/auth/google/callback` consumes the attempt once, verifies Google's
+  RS256 ID token (issuer, audience, expiry, nonce, subject, verified email),
+  and creates a seven-day opaque session. Invalid state: 400; provider failure:
+  redirect to `/sign-in?error=google`. Only local return paths are allowed.
+- `POST /api/auth/logout` revokes the D1 session and clears cookies; cross-site
+  requests: 403. Successful logout redirects to `/sign-in`.
 
-Tokens are accepted from an `Authorization: Bearer` header, Clerk's `__session` cookie, or the
-development `auth_token` cookie, in that order. All are RS256 JWTs checked against the
-provider's JWKS and issuer. For Clerk, the `azp` claim must be an allowed origin and pending
-sessions (`sts: "pending"`) are rejected; for OIDC, the audience is checked.
-
-## HTTP semantics
-
-Use:
-
-- `400` malformed input
-- `401` unauthenticated
-- `403` authenticated but unauthorized
-- `404` absent resource or deliberately concealed cross-family resource
-- `409` domain conflict such as duplicate membership or tree cycle
-- `422` semantically invalid profile values when useful
-- `429` rate-limited
-- `5xx` server/integration failure
-
-Cross-family resource probing should normally return `404` rather than revealing existence.
+Production APIs authenticate the HttpOnly `banyan_session` cookie against its
+hashed D1 record and expiry. Generic OIDC/dev JWT support remains for existing
+local tests; Google mode does not accept arbitrary bearer JWTs. Google proves
+identity only; the family authorization matrix above still applies.

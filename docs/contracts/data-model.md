@@ -253,3 +253,11 @@ Destructive migrations require:
 - compatibility assessment
 - backup/rollback plan
 - deployment sequencing notes
+
+## Authentication persistence
+
+`oauth_attempts`: state_hash (PK), nonce, verifier, return_to, expires_at (Unix
+seconds). Single-use, 10-minute lifetime; DELETE RETURNING claims callbacks.
+`auth_sessions`: token_hash (PK), subject, display_name, expires_at (Unix seconds).
+Stores no raw browser session token or Google tokens; seven-day fixed lifetime.
+Migration: `0001_busy_stepford_cuckoos.sql`.

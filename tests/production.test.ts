@@ -1,15 +1,8 @@
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
-import { SignJWT } from "jose";
 import { sql } from "drizzle-orm";
 import { db } from "~/lib/db";
 import * as schema from "~/db/schema";
 import { app } from "~/lib/hono";
-import {
-  checkClaims,
-  clerkFrontendApi,
-  displayNameFromClaims,
-  displayNameFromClerkUser,
-} from "~/lib/auth";
 import { sniffImageType, stripImageMetadata } from "~/modules/media/sanitize";
 import { setup } from "./setup";
 import { apiRequest, getTestToken } from "./helpers";
@@ -107,95 +100,6 @@ async function uploadPersonPhoto(token: string, familyId: string) {
   expect(put.status).toBe(200);
   return intent.body.asset.id as string;
 }
-
-function signTestToken(claims: Record<string, unknown>, subject: string) {
-  return new SignJWT(claims)
-    .setProtectedHeader({ alg: "RS256", kid: "test-key" })
-    .setSubject(subject)
-    .setIssuer("http://localhost:3000")
-    .setAudience("family-social-network")
-    .setIssuedAt()
-    .setExpirationTime("1h")
-    .sign((globalThis as any).__testPrivateKey);
-}
-
-async function me(headers: Record<string, string>) {
-  return app.fetch(new Request("http://localhost:3000/api/v1/me", { headers }));
-}
-
-describe("Clerk sign-in", () => {
-  it("accepts the session token from Clerk's __session cookie", async () => {
-    const token = await signTestToken({ email: "paati.family@example.com" }, "user_clerk1");
-    const response = await me({ Cookie: `__client_uat=1; __session=${token}` });
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as any;
-    expect(body.authSubject).toBe("user_clerk1");
-    expect(body.displayName).toBe("paati.family");
-  });
-
-  it("treats a pending Clerk session as signed out", async () => {
-    const token = await signTestToken({ sts: "pending" }, "user_pending");
-    expect((await me({ Authorization: `Bearer ${token}` })).status).toBe(401);
-  });
-
-  it("rejects a token signed by an unknown key", async () => {
-    const { generateKeyPair } = await import("jose");
-    const { privateKey } = await generateKeyPair("RS256");
-    const forged = await new SignJWT({})
-      .setProtectedHeader({ alg: "RS256", kid: "test-key" })
-      .setSubject("forged")
-      .setIssuer("http://localhost:3000")
-      .setAudience("family-social-network")
-      .setExpirationTime("1h")
-      .sign(privateKey);
-    expect((await me({ Cookie: `__session=${forged}` })).status).toBe(401);
-  });
-
-  it("only accepts tokens minted for this app's origin", () => {
-    const parties = ["https://banyan.srijan-guchhait.workers.dev"];
-    expect(() =>
-      checkClaims({ sub: "u", azp: "https://banyan.srijan-guchhait.workers.dev" }, parties),
-    ).not.toThrow();
-    expect(() => checkClaims({ sub: "u", azp: "https://evil.example" }, parties)).toThrow();
-    expect(() => checkClaims({ azp: parties[0] }, parties)).toThrow();
-  });
-
-  it("derives the Frontend API host from the publishable key", () => {
-    const key = `pk_test_${btoa("banyan-12.clerk.accounts.dev$")}`;
-    expect(clerkFrontendApi(key)).toBe("banyan-12.clerk.accounts.dev");
-    expect(() => clerkFrontendApi("sk_test_abc")).toThrow();
-    expect(() => clerkFrontendApi(`pk_live_${btoa("evil.example/path$")}`)).toThrow();
-  });
-
-  it("names new accounts from the Clerk user, never with a full email", () => {
-    expect(displayNameFromClerkUser({ first_name: "Aadhira", last_name: "S." })).toBe("Aadhira S.");
-    expect(displayNameFromClerkUser({ username: "meena" })).toBe("meena");
-    expect(
-      displayNameFromClerkUser({
-        primary_email_address_id: "e2",
-        email_addresses: [
-          { id: "e1", email_address: "old@example.com" },
-          { id: "e2", email_address: "sourab@example.com" },
-        ],
-      }),
-    ).toBe("sourab");
-    expect(displayNameFromClaims({ sub: "s", name: "Meena", email: "m@example.com" })).toBe(
-      "Meena",
-    );
-    expect(displayNameFromClaims({ sub: "s" })).toBe("s");
-  });
-
-  it("tells the sign-in page which provider to use", async () => {
-    const { server } = await import("~/server/app");
-    const res = await server.fetch(new Request("http://localhost:3000/api/auth/config"));
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
-      provider: "oidc",
-      devSignIn: false,
-      clerkPublishableKey: null,
-    });
-  });
-});
 
 describe("Account name", () => {
   it("lets an account set its display name", async () => {

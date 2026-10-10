@@ -30,7 +30,7 @@ The preview script enables the development sign-in for local use.
 
 ## Production
 
-Banyan runs as the `banyan` Worker at `https://banyan.srijan-guchhait.workers.dev`, with D1 (`banyan-db`), R2 (`banyan-media`) and Clerk for sign-in. Setup and deploy steps live in `docs/operations/deployment.md`.
+Banyan runs as the `banyan` Worker at `https://banyan.srijan-guchhait.workers.dev`, with D1 (`banyan-db`), R2 (`banyan-media`) and direct Google OAuth for sign-in. Setup and deploy steps live in `docs/operations/deployment.md`.
 
 Checks: `pnpm format:check && pnpm lint && pnpm type-check && pnpm test`.
 

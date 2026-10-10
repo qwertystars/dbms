@@ -1,3 +1,5 @@
+> Superseded by ADR-005-google-oauth.md. Historical decision.
+
 # ADR-004 — Clerk for production sign-in
 
 Status: Accepted

@@ -215,3 +215,13 @@ Audit events record actor, action, target, family, timestamp, and request/correl
 ### RULE-AUDIT-02
 
 Audit logs should record changed field names or summaries rather than copying sensitive profile values unless specifically required.
+
+## Direct Google authentication (October 11, 2026)
+
+Production sign-in uses Google's authorization-code OAuth flow with PKCE,
+state and nonce, and verified ID tokens. Banyan stores hashed opaque sessions
+in D1 and revokes them on logout. Accounts use stable `google:`-prefixed
+subjects, distinct from family-tree people. Email never grants or links family
+access. Sessions expire after seven days. New migrations add `oauth_attempts`
+and `auth_sessions`. Deployment and Google credential setup remain pending;
+this change has not yet been deployed.

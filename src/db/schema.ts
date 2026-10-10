@@ -371,3 +371,18 @@ export const auditEvents = sqliteTable(
     ),
   }),
 );
+
+// OAuth handshakes and app sessions store only hashes of browser credentials.
+export const oauthAttempts = sqliteTable("oauth_attempts", {
+  stateHash: text("state_hash").primaryKey(),
+  nonce: text("nonce").notNull(),
+  verifier: text("verifier").notNull(),
+  returnTo: text("return_to").notNull(),
+  expiresAt: integer("expires_at").notNull(),
+});
+export const authSessions = sqliteTable("auth_sessions", {
+  tokenHash: text("token_hash").primaryKey(),
+  subject: text("subject").notNull(),
+  displayName: text("display_name").notNull(),
+  expiresAt: integer("expires_at").notNull(),
+});

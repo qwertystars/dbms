@@ -10,15 +10,9 @@ const envSchema = z.object({
   AUTH_JWKS: z.preprocess(emptyToUndefined, z.string().optional()),
   AUTH_ISSUER: z.string().min(1).default("http://localhost:3000"),
   AUTH_AUDIENCE: z.string().min(1).default("family-social-network"),
-  // "clerk": Clerk signs people in; the issuer and JWKS come from CLERK_PUBLISHABLE_KEY.
-  AUTH_PROVIDER: z.preprocess(emptyToUndefined, z.enum(["oidc", "clerk"]).default("oidc")),
-  // Comma-separated origins accepted in a token's azp claim. For Clerk it
-  // defaults to the origin of APP_BASE_URL.
-  AUTH_AUTHORIZED_PARTIES: z.preprocess(emptyToUndefined, z.string().optional()),
-  // Public; the browser loads Clerk with it (served by GET /api/auth/config).
-  CLERK_PUBLISHABLE_KEY: z.preprocess(emptyToUndefined, z.string().startsWith("pk_").optional()),
-  // Secret; used only to look up a new account's name through Clerk's Backend API.
-  CLERK_SECRET_KEY: z.preprocess(emptyToUndefined, z.string().startsWith("sk_").optional()),
+  AUTH_PROVIDER: z.preprocess(emptyToUndefined, z.enum(["oidc", "google"]).default("oidc")),
+  GOOGLE_CLIENT_ID: z.preprocess(emptyToUndefined, z.string().optional()),
+  GOOGLE_CLIENT_SECRET: z.preprocess(emptyToUndefined, z.string().optional()),
   // Development-only cookie sign-in. Must never be "true" in production.
   AUTH_DEV_MODE: z.preprocess(emptyToUndefined, z.enum(["true", "false"]).default("false")),
 });

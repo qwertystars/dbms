@@ -38,14 +38,9 @@ exist outside Cloudflare.
 
 Authenticated subject claims are mapped to an internal Account.
 
-In production, Clerk signs people in (email or phone codes, social logins). The browser sends
-Clerk's short-lived session token on every API call, and Clerk's `__session` cookie covers
-image requests. The Worker verifies each token itself: RS256 signature against the Clerk
-instance's JWKS (cached, refetched on an unknown `kid`), issuer, expiry, the `azp` claim
-against the app's own origins (so a token minted for another site is refused), and no pending
-session status. Clerk only proves who someone is; family access is still decided by
-memberships. `CLERK_SECRET_KEY` is a Worker secret, used only to read a new user's name from
-Clerk's Backend API, and never reaches the browser. See ADR-004.
+Google ID tokens are verified against Google's JWKS, issuer, audience, expiry,
+nonce and verified-email claim during the callback. Subsequent requests use
+revocable app sessions stored as hashes in D1.
 
 Do not trust mutable display information as identity.
 
@@ -146,3 +141,13 @@ Required negative tests include:
 - expired invitation
 - repeated invitation acceptance
 - object-storage key tampering
+
+## Direct Google authentication (October 11, 2026)
+
+Production sign-in uses Google's authorization-code OAuth flow with PKCE,
+state and nonce, and verified ID tokens. Banyan stores hashed opaque sessions
+in D1 and revokes them on logout. Accounts use stable `google:`-prefixed
+subjects, distinct from family-tree people. Email never grants or links family
+access. Sessions expire after seven days. New migrations add `oauth_attempts`
+and `auth_sessions`. Deployment and Google credential setup remain pending;
+this change has not yet been deployed.

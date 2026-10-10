@@ -937,8 +937,8 @@ details.disclosure[open] > summary {
   margin-bottom: 24px;
 }
 
-/* Clerk renders its own card; centre it and let it use its natural width. */
-.auth-card-clerk {
+/* Authentication card layout. */
+.auth-card-provider {
   max-width: 440px;
   display: flex;
   flex-direction: column;
