@@ -100,3 +100,25 @@ export const authConfigSchema = z.object({
   devSignIn: z.boolean(),
   googleSignIn: z.boolean(),
 });
+
+export const usernameSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(3)
+  .max(32)
+  .regex(/^[a-z][a-z0-9_]*$/, "Use 3–32 letters, numbers or underscores, starting with a letter.");
+export const passwordSchema = z.string().min(12).max(128);
+export const passwordLoginSchema = z.object({
+  username: usernameSchema,
+  password: z.string().min(1).max(128),
+});
+export const passwordRegisterSchema = passwordLoginSchema.extend({
+  password: passwordSchema,
+  displayName: z.string().trim().min(1).max(100),
+});
+export const credentialsSchema = z.object({
+  username: usernameSchema,
+  password: passwordSchema,
+  currentPassword: z.string().max(128).optional(),
+});

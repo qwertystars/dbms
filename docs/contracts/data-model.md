@@ -261,3 +261,16 @@ seconds). Single-use, 10-minute lifetime; DELETE RETURNING claims callbacks.
 `auth_sessions`: token_hash (PK), subject, display_name, expires_at (Unix seconds).
 Stores no raw browser session token or Google tokens; seven-day fixed lifetime.
 Migration: `0001_busy_stepford_cuckoos.sql`.
+
+## Password credentials and authentication throttles
+
+Migration `0002_first_madame_masque.sql` adds `account_credentials` (one row per
+account, cascade-delete FK; unique normalized username and auth subject; salted
+password hash, credential version, Unix update time) and `login_attempts`
+(hashed throttle key, count, Unix expiry). `auth_sessions` gains
+`credential_version` (default 0) and `created_at` (Unix seconds, default 0).
+Old Google sessions remain valid but must reauthenticate before initial password
+setup. Credential changes atomically update the hash/version, revoke prior
+session rows, and insert an audit record. A conditional non-null audit action
+rolls back a failed optimistic credential update. Session-version checks also
+reject a stale login that races with credential revocation.

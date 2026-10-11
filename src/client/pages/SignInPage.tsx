@@ -1,3 +1,4 @@
+import { PasswordForm } from "~/client/components/PasswordForm";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "~/client/auth";
 import { Brand } from "~/client/components/AppLayout";
@@ -19,7 +20,7 @@ export function SignUpPage() {
   return <AuthPage mode="sign-up" />;
 }
 
-function AuthPage(_props: { mode: "sign-in" | "sign-up" }) {
+function AuthPage({ mode }: { mode: "sign-in" | "sign-up" }) {
   const { status } = useAuth();
   const config = useAuthConfig();
   const returnTo = useReturnTo();
@@ -34,29 +35,26 @@ function AuthPage(_props: { mode: "sign-in" | "sign-up" }) {
         <div className="card card-body stack">
           {config.devSignIn ? (
             <DevSignIn returnTo={returnTo} />
-          ) : config.googleSignIn ? (
-            <div className="stack">
-              <h1>Sign in</h1>
-              {params.get("error") === "google" && (
-                <p role="alert">Google sign-in failed or was cancelled. Please try again.</p>
-              )}
-              <a
-                className="btn btn-primary btn-block"
-                href={`/api/auth/google?returnTo=${encodeURIComponent(returnTo)}`}
-              >
-                Continue with Google
-              </a>
-              <p className="muted">
-                Your Google account identifies you. Family access requires an invitation.
-              </p>
-            </div>
           ) : (
-            <div>
-              <h1 style={{ fontSize: "1.5rem" }}>Sign-in isn&rsquo;t set up</h1>
-              <p className="muted" style={{ marginTop: 6 }}>
-                This site has no sign-in provider configured yet. Ask the person who runs it to
-                finish the setup.
-              </p>
+            <div className="stack">
+              <PasswordForm register={mode === "sign-up"} returnTo={returnTo} />
+              {config.googleSignIn && (
+                <div className="stack">
+                  <h1>Sign in</h1>
+                  {params.get("error") === "google" && (
+                    <p role="alert">Google sign-in failed or was cancelled. Please try again.</p>
+                  )}
+                  <a
+                    className="btn btn-primary btn-block"
+                    href={`/api/auth/google?returnTo=${encodeURIComponent(returnTo)}`}
+                  >
+                    Continue with Google
+                  </a>
+                  <p className="muted">
+                    Your Google account identifies you. Family access requires an invitation.
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>

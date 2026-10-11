@@ -5,6 +5,8 @@ import { and, eq, gt, lte } from "drizzle-orm";
 import { authSessions, oauthAttempts } from "~/db/schema";
 import { createDb, type DB } from "~/lib/db";
 import { env } from "~/lib/env";
+import { getCredentialVersion } from "~/modules/accounts/credentials";
+import { getOrCreateAccount } from "~/modules/accounts/service";
 import { hashToken, randomToken } from "~/lib/crypto";
 
 const googleKeys = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
@@ -34,15 +36,18 @@ export async function readSession(cookies: string, db: DB) {
     .where(
       and(eq(authSessions.tokenHash, await hashToken(token)), gt(authSessions.expiresAt, now())),
     );
+  if (!session) return undefined;
+  if (session.credentialVersion !== (await getCredentialVersion(db, session.subject)))
+    return undefined;
   return session;
 }
 export const googleAuth = new Hono();
-async function requestDb(c: any) {
+export async function requestDb(c: any) {
   const input = c.env?.DB ?? env.DATABASE_URL;
   if (!input) throw new Error("Database not configured");
   return createDb(input);
 }
-const cookieOptions = () => ({
+export const cookieOptions = () => ({
   httpOnly: true,
   secure: new URL(env.APP_BASE_URL).protocol === "https:",
   sameSite: "Lax" as const,
@@ -133,13 +138,21 @@ googleAuth.get("/api/auth/google/callback", async (c) => {
       requiredClaims: ["exp", "iat", "sub"],
     });
     validateGoogleClaims(payload, attempt.nonce);
+    const account = await getOrCreateAccount(
+      `google:${payload.sub}`,
+      typeof payload.name === "string" && payload.name.trim() ? payload.name.trim() : "Member",
+      db,
+    );
+    const credentialVersion = await getCredentialVersion(db, account.authSubject);
     const token = randomToken();
     const oldToken = getCookie(c, "banyan_session");
     if (oldToken)
       await db.delete(authSessions).where(eq(authSessions.tokenHash, await hashToken(oldToken)));
     await db.insert(authSessions).values({
       tokenHash: await hashToken(token),
-      subject: `google:${payload.sub}`,
+      subject: account.authSubject,
+      credentialVersion,
+      createdAt: now(),
       displayName:
         typeof payload.name === "string" && payload.name.trim() ? payload.name.trim() : "Member",
       expiresAt: now() + 7 * 86400,

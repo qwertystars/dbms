@@ -127,5 +127,28 @@ state and nonce, and verified ID tokens. Banyan stores hashed opaque sessions
 in D1 and revokes them on logout. Accounts use stable `google:`-prefixed
 subjects, distinct from family-tree people. Email never grants or links family
 access. Sessions expire after seven days. New migrations add `oauth_attempts`
-and `auth_sessions`. Deployment and Google credential setup remain pending;
-this change has not yet been deployed.
+and `auth_sessions`. Google OAuth is deployed.
+
+## Username/password accounts (October 11, 2026)
+
+Google OAuth and username/password sign-in coexist. New accounts can register
+with a display name, a unique case-insensitive username (3–32 ASCII characters,
+starting with a letter, then letters/digits/underscores), and a password of
+12–128 characters. Passwords are not trimmed. Family-tree profiles stay separate
+from accounts, and registering never grants family access.
+
+An authenticated Google account can add credentials to its existing account
+within ten minutes of signing in with Google. This does not create a second
+account or change family memberships. No account is linked by email or by a
+username entered at sign-in. Existing credentials can be changed only after
+verifying the current password; changes require a new password. Credential
+mutations are audited without usernames or passwords in the audit summary.
+
+Passwords use independently salted scrypt (N=16384, r=8, p=5, 32-byte output).
+Password routes use same-origin JSON requests and persistent D1 attempt limits:
+30 per IP and 15 per normalized username in 15 minutes. Failed logins use a
+generic error and perform a real KDF for unknown usernames too. Credential
+changes invalidate all earlier app sessions, including Google sessions, through
+an incrementing version, and issue a replacement cookie for the current browser.
+Raced logins with older credential versions cannot authenticate. Password hashes
+are never returned by the API. Password recovery is not implemented in this slice.

@@ -408,3 +408,23 @@ Production APIs authenticate the HttpOnly `banyan_session` cookie against its
 hashed D1 record and expiry. Generic OIDC/dev JWT support remains for existing
 local tests; Google mode does not accept arbitrary bearer JWTs. Google proves
 identity only; the family authorization matrix above still applies.
+
+## Password authentication and credential settings
+
+Machine-validatable contracts: `passwordLoginSchema`, `passwordRegisterSchema`,
+`credentialsSchema`, `usernameSchema`, `passwordSchema` in `src/lib/schemas.ts`.
+
+| Method and route                 | Authorization                                                                                               | Body / response                                                                                               |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| POST /api/auth/password/register | Anonymous, same origin; D1 attempt limits                                                                   | `{ username, password, displayName }`; 201 `{ ok: true }`, session cookie                                     |
+| POST /api/auth/password/login    | Anonymous, same origin; D1 attempt limits                                                                   | `{ username, password }`; 200 `{ ok: true }`, session cookie                                                  |
+| GET /api/v1/me/credentials       | Signed-in account                                                                                           | 200 `{ username: string or null, hasPassword: boolean }`                                                      |
+| PUT /api/v1/me/credentials       | Signed-in account, same origin; initial setup: Google sign-in within 10 minutes; existing: current password | `{ username, password, currentPassword? }`; 200 `{ username, hasPassword: true }`, replacement session cookie |
+
+Validation failures: 400. Invalid login: 401 `INVALID_CREDENTIALS` (generic).
+Unauthenticated settings: 401. Wrong current password: 403 `INVALID_PASSWORD`.
+Initial setup without recent Google authentication: 403 `REAUTHENTICATION_REQUIRED`.
+Cross-site writes: 403. Username collision: 409 `USERNAME_UNAVAILABLE`.
+Concurrent modification: 409 `CREDENTIALS_CHANGED`. Throttle: 429 `RATE_LIMITED`.
+The password account uses a stable `local:` subject. Google credentials reuse
+the existing `google:` subject and account ID; all family permissions are unchanged.

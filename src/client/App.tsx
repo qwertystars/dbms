@@ -1,3 +1,4 @@
+import { AccountPage } from "~/client/pages/AccountPage";
 import { Route, Routes } from "react-router-dom";
 import { RequireAuth } from "~/client/auth";
 import { AppLayout } from "~/client/components/AppLayout";
@@ -27,6 +28,7 @@ export function App() {
           </RequireAuth>
         }
       >
+        <Route path="/app/account" element={<AccountPage />} />
         <Route path="/app" element={<DashboardPage />} />
         <Route path="/app/families" element={<FamiliesPage />} />
         <Route path="/app/families/:familyId" element={<FamilyPage />} />

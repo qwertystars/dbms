@@ -4,6 +4,7 @@ import { apiErrorHandler, apiNotFoundHandler, app as api } from "~/lib/hono";
 import { signDevToken } from "~/lib/dev-auth";
 import { env } from "~/lib/env";
 import "~/routes/v1";
+import { passwordAuth } from "~/server/password-auth";
 import { authConfigSchema } from "~/lib/schemas";
 import { googleAuth, safeReturnTo } from "~/lib/google-auth";
 
@@ -13,6 +14,7 @@ export const server = new Hono();
 // and its own middleware stack (context, auth, rate limiting, logging).
 server.route("/", api);
 server.route("/", googleAuth);
+server.route("/", passwordAuth);
 
 // Development-only cookie sign-in. It is mounted only when AUTH_DEV_MODE is
 // explicitly "true" (pnpm dev:api sets it), so production Workers builds never

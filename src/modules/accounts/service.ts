@@ -1,4 +1,4 @@
-import { db } from "~/lib/db";
+import { db, type DB } from "~/lib/db";
 import { accounts } from "~/db/schema";
 import { eq } from "drizzle-orm";
 import type { Account } from "~/lib/context";
@@ -6,21 +6,22 @@ import type { Account } from "~/lib/context";
 export async function getOrCreateAccount(
   authSubject: string,
   displayName: string,
+  connection: DB = db,
 ): Promise<Account> {
-  const existing = await db.query.accounts.findFirst({
+  const existing = await connection.query.accounts.findFirst({
     where: eq(accounts.authSubject, authSubject),
   });
   if (existing) {
     return mapAccount(existing);
   }
   // Two concurrent first requests for the same subject must not both insert.
-  const inserted = await db
+  const inserted = await connection
     .insert(accounts)
     .values({ authSubject, displayName })
     .onConflictDoNothing()
     .returning();
   if (inserted.length > 0) return mapAccount(inserted[0]);
-  const raced = await db.query.accounts.findFirst({
+  const raced = await connection.query.accounts.findFirst({
     where: eq(accounts.authSubject, authSubject),
   });
   if (!raced) throw new Error("Account provisioning failed.");

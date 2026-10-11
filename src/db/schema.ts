@@ -385,4 +385,22 @@ export const authSessions = sqliteTable("auth_sessions", {
   subject: text("subject").notNull(),
   displayName: text("display_name").notNull(),
   expiresAt: integer("expires_at").notNull(),
+  credentialVersion: integer("credential_version").notNull().default(0),
+  createdAt: integer("created_at").notNull().default(0),
+});
+
+export const accountCredentials = sqliteTable("account_credentials", {
+  accountId: text("account_id")
+    .primaryKey()
+    .references(() => accounts.id, { onDelete: "cascade" }),
+  authSubject: text("auth_subject").notNull().unique(),
+  username: text("username").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  version: integer("version").notNull().default(1),
+  updatedAt: integer("updated_at").notNull(),
+});
+export const loginAttempts = sqliteTable("login_attempts", {
+  key: text("key").primaryKey(),
+  count: integer("count").notNull(),
+  expiresAt: integer("expires_at").notNull(),
 });

@@ -111,7 +111,7 @@ Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF
 ## Tests
 
 - `tests/setup.ts`, `tests/helpers.ts`, `tests/family.test.ts`, `tests/authorization.test.ts`, `tests/hardening.test.ts`, `tests/engagement.test.ts`, `tests/production.test.ts`.
-- 55 tests across 7 files, including Google OAuth callback and session security tests.
+- 68 tests across 8 files, including Google OAuth callback and session security tests.
 - Covers family lifecycle, invitations, role authorization, cross-family isolation, tree cycles/self-edges, expired/duplicate invitations, and friendship-without-family-access.
 - Also covers Viewer posting/export, whole-family and depth-limited tree projections, tree query validation, friend requests to unknown accounts, friend display names, and mutual friend requests.
 - New hardening coverage: development sign-in is absent and cannot mint tokens when disabled, a single-use invitation accepts exactly one account (including two concurrent acceptances), person deletion soft-deletes and detaches relationships, ownership transfer swaps roles, exports are audited, and sensitive mutations write audit events.
@@ -180,3 +180,25 @@ active Worker version `4e52bfcb-679b-4b2a-ad4e-9b8e61bd496a`. Google sign-in
 configuration is live; a complete interactive Google sign-in remains untested.
 GitHub CI’s duplicate pnpm version setting was removed so action-setup reads
 the pinned packageManager version from package.json.
+
+## Password authentication (October 11, 2026)
+
+Implemented username/password registration and login alongside Google OAuth,
+account settings for adding credentials and changing passwords, persistent D1
+throttling, salted native scrypt, optimistic credential versions, session
+revocation and audit events. Migration 0002 adds credential/throttle persistence
+and session version/creation fields. The actual local Workers/D1 runtime passed
+registration, `/me`, password login and password change. Google linking tests
+verify the account ID and existing family membership are preserved.
+
+Prepared an opt-in historical demo seed: 21 profiles, 31 explicit parent-child
+edges, five generations, source links and a welcome post. It is private to a
+separate demo account. Sources are Cambridge's Darwin Correspondence Project
+and English Heritage, recorded in `tools/demo/darwin-family.json`.
+Production migration 0002 was applied successfully to banyan-db. Deployment
+and production demo creation remain pending for this slice.
+
+Verification for the password slice: 68 tests across eight files, format, lint,
+type-check, migration drift check, frontend build and Worker dry-run passed.
+The complete demo seed passed through local Workers/D1 API routes with all
+21 profiles and 31 relationships present.

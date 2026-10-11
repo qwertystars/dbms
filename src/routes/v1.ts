@@ -1,3 +1,8 @@
+import { getCookie, setCookie } from "hono/cookie";
+import { cookieOptions, readSession } from "~/lib/google-auth";
+import { sameOrigin } from "~/lib/request-security";
+import { credentialsSchema } from "~/lib/schemas";
+import * as credentials from "~/modules/accounts/credentials";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { app } from "~/lib/hono";
@@ -58,6 +63,34 @@ function serializeMe(account: Account) {
 }
 
 app.get("/me", (c) => c.json(serializeMe(requireAccount(c))));
+
+app.get("/me/credentials", async (c) =>
+  c.json(await credentials.credentialsStatus(c.get("ctx").db, requireAccount(c))),
+);
+app.put("/me/credentials", zValidator("json", credentialsSchema), async (c) => {
+  if (!sameOrigin(c)) throw Errors.FORBIDDEN("Cross-site request rejected.");
+  const account = requireAccount(c),
+    db = c.get("ctx").db,
+    input = c.req.valid("json");
+  await credentials.limitPasswordAttempts(
+    db,
+    c.req.header("cf-connecting-ip") ?? "local",
+    input.username,
+  );
+  const session = await readSession(c.req.header("cookie") ?? "", db);
+  const recentGoogle =
+    account.authSubject.startsWith("google:") &&
+    session?.subject === account.authSubject &&
+    session.createdAt > Math.floor(Date.now() / 1000) - 600;
+  const identity = await credentials.saveCredentials(db, account, input, recentGoogle);
+  const token = await credentials.issuePasswordSession(
+    db,
+    identity,
+    getCookie(c, "banyan_session"),
+  );
+  setCookie(c, "banyan_session", token, { ...cookieOptions(), maxAge: 7 * 86400 });
+  return c.json({ username: input.username, hasPassword: true });
+});
 
 app.patch("/me", zValidator("json", accountUpdateSchema), async (c) => {
   const account = requireAccount(c);

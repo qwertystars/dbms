@@ -1,0 +1,196 @@
+{
+  "name": "Darwin & Wedgwood — a family of ideas",
+  "description": "A private historical demo spanning five generations of the Darwin–Wedgwood family. A selected tree, not a complete genealogy. Historical people are profiles, not app accounts. Sources: Cambridge University Library's Darwin Correspondence Project and English Heritage.",
+  "sources": {
+    "darwin": "https://www.darwinproject.ac.uk/about-darwin",
+    "emma": "https://www.darwinproject.ac.uk/emma-darwin",
+    "downhouse": "https://www.english-heritage.org.uk/visit/places/home-of-charles-darwin-down-house/history/darwin-family/"
+  },
+  "people": [
+    {
+      "key": "erasmus",
+      "name": "Erasmus Darwin",
+      "gender": "male",
+      "occupation": "Physician, poet and natural philosopher",
+      "biography": "Charles's paternal grandfather.",
+      "source": "darwin"
+    },
+    {
+      "key": "josiah1",
+      "name": "Josiah Wedgwood I",
+      "gender": "male",
+      "occupation": "Pottery manufacturer",
+      "biography": "Emma's grandfather; founder of the family pottery enterprise.",
+      "source": "emma"
+    },
+    {
+      "key": "robert",
+      "name": "Robert Waring Darwin",
+      "gender": "male",
+      "occupation": "Physician",
+      "biography": "Father of Charles and Erasmus Alvey.",
+      "source": "darwin"
+    },
+    {
+      "key": "susannah",
+      "name": "Susannah Wedgwood",
+      "gender": "female",
+      "biography": "Charles's mother; sister of Josiah Wedgwood II.",
+      "source": "emma"
+    },
+    {
+      "key": "josiah2",
+      "name": "Josiah Wedgwood II",
+      "gender": "male",
+      "biography": "Emma's father; supported Charles's Beagle voyage.",
+      "source": "emma"
+    },
+    {
+      "key": "bessy",
+      "name": "Bessy Allen",
+      "gender": "female",
+      "biography": "Emma's mother.",
+      "source": "emma"
+    },
+    {
+      "key": "charles",
+      "name": "Charles Darwin",
+      "gender": "male",
+      "dateOfBirth": "1809-02-12",
+      "occupation": "Naturalist",
+      "biography": "Developed the theory of evolution by natural selection.",
+      "source": "darwin"
+    },
+    {
+      "key": "emma",
+      "name": "Emma Darwin (née Wedgwood)",
+      "gender": "female",
+      "biography": "Charles's wife and cousin; raised their family at Down House.",
+      "source": "emma"
+    },
+    {
+      "key": "erasmusAlvey",
+      "name": "Erasmus Alvey Darwin",
+      "gender": "male",
+      "biography": "Charles's older brother.",
+      "source": "darwin"
+    },
+    {
+      "key": "william",
+      "name": "William Erasmus Darwin",
+      "gender": "male",
+      "biography": "Charles and Emma's first child.",
+      "source": "emma"
+    },
+    {
+      "key": "annie",
+      "name": "Anne Elizabeth Darwin",
+      "gender": "female",
+      "biography": "Known as Annie; died aged ten.",
+      "source": "emma"
+    },
+    {
+      "key": "mary",
+      "name": "Mary Eleanor Darwin",
+      "gender": "female",
+      "biography": "Died in infancy.",
+      "source": "emma"
+    },
+    {
+      "key": "henrietta",
+      "name": "Henrietta Emma Darwin",
+      "gender": "female",
+      "biography": "Known as Etty; recalled childhood at Down House.",
+      "source": "downhouse"
+    },
+    {
+      "key": "george",
+      "name": "George Howard Darwin",
+      "gender": "male",
+      "biography": "The fifth Darwin child; enjoyed outdoor games.",
+      "source": "downhouse"
+    },
+    {
+      "key": "elizabeth",
+      "name": "Elizabeth Darwin",
+      "gender": "female",
+      "biography": "One of Charles and Emma's daughters.",
+      "source": "emma"
+    },
+    {
+      "key": "francis",
+      "name": "Francis Darwin",
+      "gender": "male",
+      "biography": "Recalled his father's kindness and Sandwalk routine.",
+      "source": "downhouse"
+    },
+    {
+      "key": "leonard",
+      "name": "Leonard Darwin",
+      "gender": "male",
+      "biography": "One of Charles and Emma's sons.",
+      "source": "emma"
+    },
+    {
+      "key": "horace",
+      "name": "Horace Darwin",
+      "gender": "male",
+      "biography": "One of Charles and Emma's sons.",
+      "source": "emma"
+    },
+    {
+      "key": "charlesWaring",
+      "name": "Charles Waring Darwin",
+      "gender": "male",
+      "biography": "The youngest child; died in infancy.",
+      "source": "emma"
+    },
+    {
+      "key": "amy",
+      "name": "Amy Darwin",
+      "gender": "female",
+      "biography": "Bernard's mother; died shortly after his birth.",
+      "source": "emma"
+    },
+    {
+      "key": "bernard",
+      "name": "Bernard Darwin",
+      "gender": "male",
+      "biography": "Francis's son; cared for by Charles and Emma.",
+      "source": "emma"
+    }
+  ],
+  "edges": [
+    ["erasmus", "robert"],
+    ["josiah1", "susannah"],
+    ["josiah1", "josiah2"],
+    ["robert", "charles"],
+    ["susannah", "charles"],
+    ["robert", "erasmusAlvey"],
+    ["susannah", "erasmusAlvey"],
+    ["josiah2", "emma"],
+    ["bessy", "emma"],
+    ["charles", "william"],
+    ["emma", "william"],
+    ["charles", "annie"],
+    ["emma", "annie"],
+    ["charles", "mary"],
+    ["emma", "mary"],
+    ["charles", "henrietta"],
+    ["emma", "henrietta"],
+    ["charles", "george"],
+    ["emma", "george"],
+    ["charles", "elizabeth"],
+    ["emma", "elizabeth"],
+    ["charles", "francis"],
+    ["emma", "francis"],
+    ["charles", "leonard"],
+    ["emma", "leonard"],
+    ["charles", "horace"],
+    ["emma", "horace"],
+    ["charles", "charlesWaring"],
+    ["emma", "charlesWaring"],
+    ["francis", "bernard"],
+    ["amy", "bernard"]
+  ]
+}

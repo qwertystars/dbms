@@ -151,3 +151,23 @@ Use pnpm 10.11.1 (pinned in package.json). The workspace lists the root package
 and uses pnpm 10’s `onlyBuiltDependencies` for required install scripts.
 Cloudflare installs with `pnpm install --frozen-lockfile`. An `allowBuilds`-only
 workspace without `packages` fails on this pnpm version.
+
+## Password-auth rollout and historical demo
+
+Apply `0002_first_madame_masque.sql` with `pnpm db:apply:cloudflare` before the
+new Worker deploys. It is additive and keeps existing Google sessions compatible.
+Push main for the Cloudflare bot, then verify registration, login, a password
+change and rejection of the old session. No new authentication secret is required.
+
+Create the optional private demo through authenticated application APIs:
+
+```bash
+BANYAN_BASE_URL=https://banyan.srijan-guchhait.workers.dev node tools/seed-darwin-demo.mjs
+```
+
+The script generates credentials once in `.banyan-demo-credentials.json` (ignored
+by Git, mode 0600), creates the demo account, and idempotently adds 21 historical
+profiles and 31 parent-child relationships. Never print or commit the password.
+The file contains the tree URL. `BANYAN_DEMO_CREDENTIALS_FILE` can select a scratch
+file for local testing. Family mutations go through server authorization and
+normal audit/cycle checks. The demo is private to its own account.

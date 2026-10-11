@@ -26,3 +26,5 @@ Status: Proposed | Accepted | Superseded
 ```
 
 - `ADR-005-google-oauth.md` — Direct Google OAuth and revocable D1 sessions (supersedes ADR-004)
+
+- `ADR-006-password-credentials.md` — Password credentials linked to existing Google accounts

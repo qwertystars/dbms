@@ -27,3 +27,5 @@ dist
 worker-configuration.d.ts
 
 client_secret_*.json
+
+.banyan-demo-credentials.json
