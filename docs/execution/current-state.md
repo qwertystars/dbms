@@ -195,10 +195,23 @@ Prepared an opt-in historical demo seed: 21 profiles, 31 explicit parent-child
 edges, five generations, source links and a welcome post. It is private to a
 separate demo account. Sources are Cambridge's Darwin Correspondence Project
 and English Heritage, recorded in `tools/demo/darwin-family.json`.
-Production migration 0002 was applied successfully to banyan-db. Deployment
-and production demo creation remain pending for this slice.
+Production migration 0002 was applied successfully to banyan-db. Password authentication deployed successfully through Cloudflare Git integration
+from main commit 2db99c5; GitHub CI also passed. Production demo creation is
+complete.
 
 Verification for the password slice: 68 tests across eight files, format, lint,
 type-check, migration drift check, frontend build and Worker dry-run passed.
 The complete demo seed passed through local Workers/D1 API routes with all
 21 profiles and 31 relationships present.
+
+Production verification: demo registration succeeded; password login, password
+change and replacement-password login returned 200; the account ID and family
+were unchanged. Old-session and anonymous-tree requests returned 401. Logout
+returned 302 and its revoked session returned 401. Google sign-in remains
+configured alongside passwords. Full interactive Google login remains untested
+by the agent, though mocked callback and linking tests pass.
+
+Created private demo username `darwin_demo`, with 21 historical profiles and
+31 parent-child edges over five generations. Tree: `/app/families/UvWF9RoFtazdXiUnxzT8V/tree`.
+Its generated password and full tree URL are stored only in the local ignored
+`.banyan-demo-credentials.json` (mode 0600). No credentials were committed.
