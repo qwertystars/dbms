@@ -58,6 +58,28 @@ export function DashboardPage() {
           <Alert onClose={() => setError(null)}>{error}</Alert>
         </div>
       )}
+      {families && families.length > 0 && (
+        <section className="dashboard-welcome">
+          <div>
+            <span className="eyebrow">The people who make you, you</span>
+            <h2>Your story is still growing.</h2>
+            <p>Reconnect with your roots. Find a familiar face. Make room for the next chapter.</p>
+            <Link className="btn btn-primary" to={`/app/families/${families[0].family.id}/tree`}>
+              Explore {families[0].family.name} <span aria-hidden="true">↗</span>
+            </Link>
+          </div>
+          <div className="dashboard-branch" aria-hidden="true">
+            <svg viewBox="0 0 300 160" fill="none">
+              <path d="M150 40V85M55 120V85H245V120" stroke="currentColor" strokeWidth="1.5" />
+              <circle cx="150" cy="35" r="21" fill="var(--surface)" stroke="currentColor" />
+              <circle cx="55" cy="126" r="17" fill="var(--surface)" stroke="currentColor" />
+              <circle cx="150" cy="126" r="17" fill="var(--surface)" stroke="currentColor" />
+              <circle cx="245" cy="126" r="17" fill="var(--surface)" stroke="currentColor" />
+            </svg>
+            <span>Every branch has roots.</span>
+          </div>
+        </section>
+      )}
       <div className="grid-2">
         <div className="stack-sm">
           <h2>Your families</h2>

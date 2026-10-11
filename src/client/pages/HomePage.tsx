@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "~/client/auth";
-import { Brand } from "~/client/components/AppLayout";
-import { Icon } from "~/client/components/ui";
+import { Brand, ThemeToggle } from "~/client/components/AppLayout";
+import { Avatar, Icon } from "~/client/components/ui";
 
 const FEATURES = [
   {
@@ -35,6 +35,7 @@ export function HomePage() {
         <div className="container topbar-inner">
           <Brand />
           <div className="topbar-user">
+            <ThemeToggle />
             {signedIn ? (
               <Link to="/app" className="btn btn-primary btn-sm">
                 Open the app
@@ -48,19 +49,79 @@ export function HomePage() {
         </div>
       </header>
       <main className="container">
-        <section className="hero">
-          <span className="eyebrow">Every branch has roots.</span>
-          <h1>A private home for your family&rsquo;s story.</h1>
-          <p>
-            Build your family tree, keep profiles for every relative, and share updates in a space
-            that belongs only to the people you invite.
-          </p>
-          <div className="row">
-            <Link to={signedIn ? "/app" : "/sign-in"} className="btn btn-primary btn-lg">
-              {signedIn ? "Open the app" : "Get started"}
-            </Link>
+        <section className="landing-hero">
+          <div className="landing-copy">
+            <span className="landing-kicker">
+              <span /> Your people. Your place.
+            </span>
+            <h1>
+              Every branch
+              <br />
+              has <em>roots.</em>
+            </h1>
+            <p>
+              A place for the people who made you, and the stories that connect you. Grow your
+              family tree. Keep your memories close.
+            </p>
+            <div className="row">
+              <Link to={signedIn ? "/app" : "/sign-in"} className="btn btn-primary btn-lg">
+                {signedIn ? "Open the app" : "Start your family story"}{" "}
+                <span aria-hidden="true">↗</span>
+              </Link>
+            </div>
+            <div className="landing-trust">
+              <Icon name="lock" size={15} /> Private by default. Only the people you invite.
+            </div>
+          </div>
+          <div className="landing-register" aria-label="Illustration of a sample family tree">
+            <div className="register-heading">
+              <Icon name="tree" />
+              <span>The family register</span>
+              <span className="subtle">Est. together</span>
+            </div>
+            <div className="register-canvas">
+              <span className="register-note">
+                a little history,
+                <br />a lot of belonging.
+              </span>
+              <svg viewBox="0 0 500 380" className="register-lines" aria-hidden="true">
+                <path d="M250 100 V155 M105 210 V155 H395 V210 M250 155 V210" />
+                <path d="M250 260 V310" />
+              </svg>
+              <div className="sample-person sample-root">
+                <Avatar name="Asha Rao" />
+                <strong>Asha Rao</strong>
+                <span>1942 – 2021</span>
+              </div>
+              <div className="sample-person sample-left">
+                <Avatar name="Maya Rao" />
+                <strong>Maya Rao</strong>
+                <span>b. 1968</span>
+              </div>
+              <div className="sample-person sample-center">
+                <Avatar name="Arun Rao" />
+                <strong>Arun Rao</strong>
+                <span>b. 1972</span>
+              </div>
+              <div className="sample-person sample-right">
+                <Avatar name="Leela Rao" />
+                <strong>Leela Rao</strong>
+                <span>b. 1976</span>
+              </div>
+              <div className="register-you">
+                <span /> Your story continues here
+              </div>
+            </div>
+            <div className="register-caption">
+              <span>Three generations. One shared story.</span>
+              <Icon name="lock" size={14} />
+            </div>
           </div>
         </section>
+        <div className="landing-section-title">
+          <span className="eyebrow">Made for belonging</span>
+          <h2>A little closer, even from afar.</h2>
+        </div>
         <section className="features" aria-label="Features">
           {FEATURES.map((f) => (
             <div key={f.title} className="card card-body feature">
@@ -72,6 +133,11 @@ export function HomePage() {
             </div>
           ))}
         </section>
+        <footer className="landing-footer">
+          <Brand />
+          <span>Every branch has roots.</span>
+          <Link to={signedIn ? "/app" : "/sign-in"}>Make yourself at home ↗</Link>
+        </footer>
       </main>
     </>
   );
