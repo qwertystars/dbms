@@ -241,3 +241,15 @@ changes invalidate all earlier app sessions, including Google sessions, through
 an incrementing version, and issue a replacement cookie for the current browser.
 Raced logins with older credential versions cannot authenticate. Password hashes
 are never returned by the API. Password recovery is not implemented in this slice.
+
+### Family tree browsing experience
+
+The family tree displays recorded parent-child connections between generation-aligned
+person cards. Users can scroll or drag to explore, zoom and reset the canvas, search
+by name, and select a person to highlight their immediate parent/child connections.
+A selection preview links to the person's full profile and lets users navigate to
+connected relatives. People without relationships remain visible in a separate list.
+Creator and Editor relationship controls appear below the tree; Viewers can browse.
+The interface supports the light and dark themes, narrow screens, keyboard controls,
+and reduced-motion preferences. The public landing-page tree is illustrative sample
+content, never data from a private family.

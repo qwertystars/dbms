@@ -1,18 +1,26 @@
 import { type SubmitEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, errorMessage } from "~/client/api";
-import { Field, RoleBadge, useBusy } from "~/client/components/ui";
+import { Field, Icon, RoleBadge, useBusy } from "~/client/components/ui";
 
 export function FamilyCard({ item }: { item: any }) {
   const { family, membership } = item;
   return (
     <Link to={`/app/families/${family.id}`} className="card card-body card-link">
       <div className="family-card">
+        <div className="family-card-art" aria-hidden="true">
+          <Icon name="tree" size={42} />
+          <span>Every branch has roots.</span>
+        </div>
         <div className="family-card-top">
           <h3>{family.name}</h3>
           <RoleBadge role={membership.role} />
         </div>
-        <p>{family.description || "No description yet."}</p>
+        <p>{family.description || "A private place for your family’s story."}</p>
+        <div className="family-card-footer">
+          <span>Open family space</span>
+          <span aria-hidden="true">↗</span>
+        </div>
       </div>
     </Link>
   );

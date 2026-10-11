@@ -215,3 +215,27 @@ Created private demo username `darwin_demo`, with 21 historical profiles and
 31 parent-child edges over five generations. Tree: `/app/families/UvWF9RoFtazdXiUnxzT8V/tree`.
 Its generated password and full tree URL are stored only in the local ignored
 `.banyan-demo-credentials.json` (mode 0600). No credentials were committed.
+
+## Frontend and family tree experience (October 11, 2026)
+
+The landing page now includes an illustrative family register, and the dashboard
+provides a direct entry into the first family tree. Shared navigation, family cards,
+page headings, buttons, and sheets use a more spacious responsive layout while
+retaining the Notebook/Slate themes and existing brand tokens.
+
+The tree page renders explicit parent-child relationships as animated SVG curves
+between generation-aligned profile cards. It supports mouse drag panning, native
+touch/keyboard scrolling, 50–150% zoom and reset, case-insensitive person search
+with navigation to the result, and a selected-person preview with links to their
+profile and immediate parents/children. Disconnected people remain listed separately.
+Creator/Editor relationship entry is available below the canvas in a disclosure;
+Viewers continue to have read-only tree access. Motion is disabled when the user
+prefers reduced motion. The presentation does not infer spouse relationships or
+change the persisted graph, API, permissions, authentication, or deployment setup.
+
+Verification: four new layout unit tests cover generation placement, disconnected
+people, converging branches, and birth-date ordering. Browser checks with mocked
+API responses use the existing historical fixture (21 profiles, 31 edges) and cover
+search, connection highlighting, profile links, zoom/reset, drag panning, 360px and
+390px layouts, both themes, reduced motion, Viewer controls, and the empty state.
+These browser checks were run locally; browser automation is not added to CI.
