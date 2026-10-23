@@ -7,6 +7,7 @@ import {
   families,
   familyInvitations,
   familyMemberships,
+  personClaimRequests,
 } from "~/db/schema";
 import { Errors } from "~/lib/errors";
 import type { Account } from "~/lib/context";
@@ -205,10 +206,20 @@ export async function removeMembership(actor: Account, familyId: string, members
   if (!target || target.removedAt) throw Errors.NOT_FOUND();
   if (target.role === "CREATOR") throw Errors.FORBIDDEN("Cannot remove the Creator.");
 
+  const now = new Date();
   await db.batch([
     db
+      .update(personClaimRequests)
+      .set({ status: "CANCELLED", decidedAt: now })
+      .where(
+        and(
+          eq(personClaimRequests.membershipId, membershipId),
+          eq(personClaimRequests.status, "PENDING"),
+        ),
+      ),
+    db
       .update(familyMemberships)
-      .set({ removedAt: new Date() })
+      .set({ removedAt: now })
       .where(eq(familyMemberships.id, membershipId)),
     db.insert(auditEvents).values(
       auditValues({

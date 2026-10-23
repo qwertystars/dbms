@@ -17,6 +17,8 @@ export const reactionTypeEnum = ["LIKE", "LOVE", "LAUGH", "SAD"] as const;
 export const mediaPurposeEnum = ["ACCOUNT_AVATAR", "PERSON_PROFILE", "POST_ATTACHMENT"] as const;
 export const mediaStatusEnum = ["PENDING", "READY", "DELETING", "DELETED"] as const;
 export const friendRequestStatusEnum = ["PENDING", "ACCEPTED", "REJECTED", "CANCELLED"] as const;
+export const claimStatusEnum = ["PENDING", "APPROVED", "REJECTED", "CANCELLED"] as const;
+export const rsvpResponseEnum = ["GOING", "MAYBE", "NOT_GOING"] as const;
 
 export type FamilyRole = (typeof familyRoleEnum)[number];
 export type InvitationRole = (typeof invitationRoleEnum)[number];
@@ -24,6 +26,8 @@ export type ReactionType = (typeof reactionTypeEnum)[number];
 export type MediaPurpose = (typeof mediaPurposeEnum)[number];
 export type MediaStatus = (typeof mediaStatusEnum)[number];
 export type FriendRequestStatus = (typeof friendRequestStatusEnum)[number];
+export type ClaimStatus = (typeof claimStatusEnum)[number];
+export type RsvpResponse = (typeof rsvpResponseEnum)[number];
 
 export const accounts = sqliteTable("accounts", {
   id: text("id")
@@ -208,6 +212,121 @@ export const parentChildRelationships = sqliteTable(
   }),
 );
 
+// A partner pair is stored once, with personAId < personBId.
+export const partnerRelationships = sqliteTable(
+  "partner_relationships",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => nanoid()),
+    familyId: text("family_id")
+      .notNull()
+      .references(() => families.id),
+    personAId: text("person_a_id")
+      .notNull()
+      .references(() => people.id),
+    personBId: text("person_b_id")
+      .notNull()
+      .references(() => people.id),
+    createdByAccountId: text("created_by_account_id")
+      .notNull()
+      .references(() => accounts.id),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => ({
+    uniquePair: uniqueIndex("partner_family_pair_unique").on(
+      table.familyId,
+      table.personAId,
+      table.personBId,
+    ),
+    orderedCheck: check("partner_ordered_pair", sql`${table.personAId} < ${table.personBId}`),
+  }),
+);
+
+export const personClaimRequests = sqliteTable(
+  "person_claim_requests",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => nanoid()),
+    familyId: text("family_id")
+      .notNull()
+      .references(() => families.id),
+    personId: text("person_id")
+      .notNull()
+      .references(() => people.id),
+    membershipId: text("membership_id")
+      .notNull()
+      .references(() => familyMemberships.id),
+    requesterAccountId: text("requester_account_id")
+      .notNull()
+      .references(() => accounts.id),
+    status: text("status", { enum: claimStatusEnum }).notNull().default("PENDING"),
+    decidedByAccountId: text("decided_by_account_id").references(() => accounts.id),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    decidedAt: integer("decided_at", { mode: "timestamp" }),
+  },
+  (table) => ({
+    onePendingPerMembership: uniqueIndex("person_claim_requests_membership_pending")
+      .on(table.membershipId)
+      .where(sql`${table.status} = 'PENDING'`),
+    familyStatusIdx: index("person_claim_requests_family_status").on(table.familyId, table.status),
+  }),
+);
+
+export const familyEvents = sqliteTable(
+  "family_events",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => nanoid()),
+    familyId: text("family_id")
+      .notNull()
+      .references(() => families.id),
+    title: text("title").notNull(),
+    description: text("description"),
+    startsOn: text("starts_on").notNull(),
+    startTime: text("start_time"),
+    location: text("location"),
+    createdByAccountId: text("created_by_account_id")
+      .notNull()
+      .references(() => accounts.id),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    deletedAt: integer("deleted_at", { mode: "timestamp" }),
+  },
+  (table) => ({
+    familyStartsOnIdx: index("family_events_family_starts_on").on(table.familyId, table.startsOn),
+  }),
+);
+
+export const eventRsvps = sqliteTable(
+  "event_rsvps",
+  {
+    eventId: text("event_id")
+      .notNull()
+      .references(() => familyEvents.id),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id),
+    response: text("response", { enum: rsvpResponseEnum }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.eventId, table.accountId], name: "event_rsvps_pkey" }),
+  }),
+);
+
 export const posts = sqliteTable(
   "posts",
   {
@@ -250,6 +369,22 @@ export const postMedia = sqliteTable(
       columns: [table.postId, table.mediaAssetId],
       name: "post_media_pkey",
     }),
+  }),
+);
+
+export const postPersonTags = sqliteTable(
+  "post_person_tags",
+  {
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id),
+    personId: text("person_id")
+      .notNull()
+      .references(() => people.id),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.postId, table.personId], name: "post_person_tags_pkey" }),
+    personIdx: index("post_person_tags_person_id").on(table.personId),
   }),
 );
 

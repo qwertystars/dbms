@@ -26,7 +26,14 @@ import {
   uploadCompleteSchema,
   accountUpdateSchema,
   uuidSchema,
+  partnerEdgeSchema,
+  claimDecisionSchema,
+  familyEventCreateSchema,
+  familyEventUpdateSchema,
+  rsvpSchema,
 } from "~/lib/schemas";
+import * as claimsService from "~/modules/claims/service";
+import * as familyEventsService from "~/modules/events/family-events";
 import * as accountService from "~/modules/accounts/service";
 import * as familyService from "~/modules/families/service";
 import * as peopleService from "~/modules/people/service";
@@ -50,6 +57,8 @@ const personIdParam = z.object({ familyId: uuidSchema, personId: uuidSchema });
 const postIdParam = z.object({ familyId: uuidSchema, postId: uuidSchema });
 const commentIdParam = z.object({ familyId: uuidSchema, commentId: uuidSchema });
 const relationshipIdParam = z.object({ familyId: uuidSchema, relationshipId: uuidSchema });
+const claimIdParam = z.object({ familyId: uuidSchema, requestId: uuidSchema });
+const eventIdParam = z.object({ familyId: uuidSchema, eventId: uuidSchema });
 
 // Accounts
 function serializeMe(account: Account) {
@@ -345,6 +354,150 @@ app.delete(
   },
 );
 
+app.post(
+  "/families/:familyId/relationships/partners",
+  zValidator("param", familyIdParam),
+  zValidator("json", partnerEdgeSchema),
+  async (c) => {
+    const account = requireAccount(c);
+    const { familyId } = c.req.valid("param");
+    const body = c.req.valid("json");
+    const partner = await treeService.addPartner(account, familyId, body.personAId, body.personBId);
+    return c.json({ partner }, 201);
+  },
+);
+
+app.delete(
+  "/families/:familyId/relationships/partners/:relationshipId",
+  zValidator("param", relationshipIdParam),
+  async (c) => {
+    const account = requireAccount(c);
+    const { familyId, relationshipId } = c.req.valid("param");
+    await treeService.removePartner(account, familyId, relationshipId);
+    return c.json({ removed: true });
+  },
+);
+
+// Account-to-person claims
+app.post(
+  "/families/:familyId/people/:personId/claim-requests",
+  zValidator("param", personIdParam),
+  async (c) => {
+    const account = requireAccount(c);
+    const { familyId, personId } = c.req.valid("param");
+    const request = await claimsService.requestClaim(account, familyId, personId);
+    return c.json({ request }, 201);
+  },
+);
+
+app.get("/families/:familyId/claim-requests", zValidator("param", familyIdParam), async (c) => {
+  const account = requireAccount(c);
+  const { familyId } = c.req.valid("param");
+  const requests = await claimsService.listClaims(account, familyId);
+  return c.json({ requests });
+});
+
+app.post(
+  "/families/:familyId/claim-requests/:requestId/decision",
+  zValidator("param", claimIdParam),
+  zValidator("json", claimDecisionSchema),
+  async (c) => {
+    const account = requireAccount(c);
+    const { familyId, requestId } = c.req.valid("param");
+    const { decision } = c.req.valid("json");
+    const request = await claimsService.decideClaim(account, familyId, requestId, decision);
+    return c.json({ request });
+  },
+);
+
+app.delete(
+  "/families/:familyId/claim-requests/:requestId",
+  zValidator("param", claimIdParam),
+  async (c) => {
+    const account = requireAccount(c);
+    const { familyId, requestId } = c.req.valid("param");
+    const request = await claimsService.cancelClaim(account, familyId, requestId);
+    return c.json({ request });
+  },
+);
+
+app.delete("/families/:familyId/me/person-link", zValidator("param", familyIdParam), async (c) => {
+  const account = requireAccount(c);
+  const { familyId } = c.req.valid("param");
+  return c.json(await claimsService.unlinkSelf(account, familyId));
+});
+
+// Family events
+app.get(
+  "/families/:familyId/events",
+  zValidator("param", familyIdParam),
+  zValidator("query", z.object({ from: z.string().date().optional() })),
+  async (c) => {
+    const account = requireAccount(c);
+    const { familyId } = c.req.valid("param");
+    const from = c.req.valid("query").from ?? new Date().toISOString().slice(0, 10);
+    const events = await familyEventsService.listEvents(account, familyId, from);
+    return c.json({ events });
+  },
+);
+
+app.post(
+  "/families/:familyId/events",
+  zValidator("param", familyIdParam),
+  zValidator("json", familyEventCreateSchema),
+  async (c) => {
+    const account = requireAccount(c);
+    const { familyId } = c.req.valid("param");
+    const event = await familyEventsService.createEvent(account, familyId, c.req.valid("json"));
+    return c.json({ event }, 201);
+  },
+);
+
+app.patch(
+  "/families/:familyId/events/:eventId",
+  zValidator("param", eventIdParam),
+  zValidator("json", familyEventUpdateSchema),
+  async (c) => {
+    const account = requireAccount(c);
+    const { familyId, eventId } = c.req.valid("param");
+    const event = await familyEventsService.updateEvent(
+      account,
+      familyId,
+      eventId,
+      c.req.valid("json"),
+    );
+    return c.json({ event });
+  },
+);
+
+app.delete("/families/:familyId/events/:eventId", zValidator("param", eventIdParam), async (c) => {
+  const account = requireAccount(c);
+  const { familyId, eventId } = c.req.valid("param");
+  return c.json(await familyEventsService.deleteEvent(account, familyId, eventId));
+});
+
+app.put(
+  "/families/:familyId/events/:eventId/rsvp",
+  zValidator("param", eventIdParam),
+  zValidator("json", rsvpSchema),
+  async (c) => {
+    const account = requireAccount(c);
+    const { familyId, eventId } = c.req.valid("param");
+    const { response } = c.req.valid("json");
+    return c.json(await familyEventsService.setRsvp(account, familyId, eventId, response));
+  },
+);
+
+app.delete(
+  "/families/:familyId/events/:eventId/rsvp",
+  zValidator("param", eventIdParam),
+  async (c) => {
+    const account = requireAccount(c);
+    const { familyId, eventId } = c.req.valid("param");
+    return c.json(await familyEventsService.clearRsvp(account, familyId, eventId));
+  },
+);
+
 // Social
 app.post(
   "/families/:familyId/posts",
@@ -367,13 +520,14 @@ app.get(
     z.object({
       cursor: z.string().max(200).optional(),
       limit: z.coerce.number().int().min(1).max(50).default(20),
+      personId: uuidSchema.optional(),
     }),
   ),
   async (c) => {
     const account = requireAccount(c);
     const { familyId } = c.req.valid("param");
-    const { cursor, limit } = c.req.valid("query");
-    const result = await socialService.listPosts(account, familyId, cursor, limit);
+    const { cursor, limit, personId } = c.req.valid("query");
+    const result = await socialService.listPosts(account, familyId, cursor, limit, personId);
     return c.json(result);
   },
 );

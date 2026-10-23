@@ -52,12 +52,43 @@ export const ownershipTransferSchema = z.object({
   newCreatorMembershipId: uuidSchema,
 });
 
+const taggedPersonIdsSchema = z.array(uuidSchema).max(20);
+
 export const postCreateSchema = z.object({
   body: z.string().min(1).max(5000),
+  personIds: taggedPersonIdsSchema.optional(),
 });
 
 export const postUpdateSchema = z.object({
   body: z.string().min(1).max(5000),
+  personIds: taggedPersonIdsSchema.optional(),
+});
+
+export const partnerEdgeSchema = z.object({
+  personAId: uuidSchema,
+  personBId: uuidSchema,
+});
+
+export const claimDecisionSchema = z.object({
+  decision: z.enum(["APPROVED", "REJECTED"]),
+});
+
+export const familyEventCreateSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  description: z.string().max(2000).optional().nullable(),
+  startsOn: z.string().date(),
+  startTime: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:MM (24-hour).")
+    .optional()
+    .nullable(),
+  location: z.string().max(300).optional().nullable(),
+});
+
+export const familyEventUpdateSchema = familyEventCreateSchema.partial();
+
+export const rsvpSchema = z.object({
+  response: z.enum(["GOING", "MAYBE", "NOT_GOING"]),
 });
 
 export const commentCreateSchema = z.object({
