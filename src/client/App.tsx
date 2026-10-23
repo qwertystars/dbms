@@ -1,5 +1,7 @@
 import { AccountPage } from "~/client/pages/AccountPage";
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useParams } from "react-router-dom";
+import { EventsPage } from "~/client/pages/EventsPage";
+import { PeoplePage } from "~/client/pages/PeoplePage";
 import { RequireAuth } from "~/client/auth";
 import { AppLayout } from "~/client/components/AppLayout";
 import { DashboardPage } from "~/client/pages/DashboardPage";
@@ -13,6 +15,11 @@ import { InvitationPage } from "~/client/pages/InvitationPage";
 import { PersonPage } from "~/client/pages/PersonPage";
 import { SignInPage, SignUpPage } from "~/client/pages/SignInPage";
 import { TreePage } from "~/client/pages/TreePage";
+
+function FeedRedirect() {
+  const { familyId } = useParams<{ familyId: string }>();
+  return <Navigate to={`/app/families/${familyId}/memories`} replace />;
+}
 
 export function App() {
   return (
@@ -33,7 +40,10 @@ export function App() {
         <Route path="/app/families" element={<FamiliesPage />} />
         <Route path="/app/families/:familyId" element={<FamilyPage />} />
         <Route path="/app/families/:familyId/tree" element={<TreePage />} />
-        <Route path="/app/families/:familyId/feed" element={<FeedPage />} />
+        <Route path="/app/families/:familyId/memories" element={<FeedPage />} />
+        <Route path="/app/families/:familyId/feed" element={<FeedRedirect />} />
+        <Route path="/app/families/:familyId/people" element={<PeoplePage />} />
+        <Route path="/app/families/:familyId/events" element={<EventsPage />} />
         <Route path="/app/families/:familyId/people/:personId" element={<PersonPage />} />
         <Route path="/app/friends" element={<FriendsPage />} />
       </Route>

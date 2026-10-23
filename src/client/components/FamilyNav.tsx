@@ -2,6 +2,14 @@ import { NavLink } from "react-router-dom";
 import type { ReactNode } from "react";
 import { PageHeader, RoleBadge } from "~/client/components/ui";
 
+export const FAMILY_SECTIONS = [
+  { path: "", label: "Overview", icon: "home" },
+  { path: "/tree", label: "Tree", icon: "tree" },
+  { path: "/memories", label: "Memories", icon: "message" },
+  { path: "/people", label: "People", icon: "users" },
+  { path: "/events", label: "Events", icon: "calendar" },
+] as const;
+
 /** Shared header for every family-scoped page: name, role, and section tabs. */
 export function FamilyHeader({
   familyId,
@@ -34,11 +42,15 @@ export function FamilyHeader({
         }
       />
       <nav className="tabs" aria-label="Family sections">
-        <NavLink to={`/app/families/${familyId}`} end>
-          Overview
-        </NavLink>
-        <NavLink to={`/app/families/${familyId}/tree`}>Tree</NavLink>
-        <NavLink to={`/app/families/${familyId}/feed`}>Feed</NavLink>
+        {FAMILY_SECTIONS.map((section) => (
+          <NavLink
+            key={section.label}
+            to={`/app/families/${familyId}${section.path}`}
+            end={section.path === ""}
+          >
+            {section.label}
+          </NavLink>
+        ))}
       </nav>
     </>
   );
