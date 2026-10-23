@@ -15,6 +15,7 @@
     "docs/contracts/api-contract.md",
     "docs/contracts/data-model.md",
     "docs/contracts/event-contracts.md",
+    "docs/design/design-system.md",
     "docs/domain/business-logic.md",
     "docs/domain/invariants.md",
     "docs/execution/current-state.md",

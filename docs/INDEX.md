@@ -12,11 +12,18 @@ Read:
 4. `architecture/backend-architecture.md`
 5. `contracts/data-model.md`
 
+## Visual design and UI changes
+
+Read:
+
+- `design/design-system.md`: the implemented "Living Archive" tokens, type, layout shell and components.
+- `architecture/frontend-architecture.md`
+
 ## Banyan brand and next-phase spec
 
 Read:
 
-- `product/banyan-spec.md`: brand kit (tokens, type, logo, voice) and the next-phase product plan. Check `execution/current-state.md` for which parts exist and which conflicts are still open.
+- `product/banyan-spec.md`: logo, voice and the next-phase product plan. Its colour and type sections are superseded by `design/design-system.md`. Check `execution/current-state.md` for which parts exist and which conflicts are still open.
 
 ## Source interpretation and assumptions
 

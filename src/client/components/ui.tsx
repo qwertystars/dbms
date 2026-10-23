@@ -151,6 +151,13 @@ export function initials(name: string | null | undefined): string {
   return (first + last).toUpperCase();
 }
 
+/** Stable neutral background (0-4) for initials, derived from the name only. */
+function toneFor(name: string | null | undefined): number {
+  let hash = 0;
+  for (const char of name ?? "") hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return hash % 5;
+}
+
 export function Avatar({
   name,
   size = "md",
@@ -162,7 +169,7 @@ export function Avatar({
   mediaId?: string | null;
   deceased?: boolean;
 }) {
-  const classes = ["avatar"];
+  const classes = ["avatar", `avatar-tone-${toneFor(name)}`];
   if (size !== "md") classes.push(`avatar-${size}`);
   // Someone who has died gets a pencil ring and nothing more (brand spec §3.7).
   if (deceased) classes.push("avatar-deceased");
@@ -345,6 +352,18 @@ const iconPaths: Record<string, ReactNode> = {
     </>
   ),
   sparkle: <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />,
+  home: (
+    <>
+      <path d="M4 10.5 12 4l8 6.5V20H4z" />
+      <path d="M10 20v-5.5h4V20" />
+    </>
+  ),
+  user: (
+    <>
+      <circle cx="12" cy="8.5" r="3.75" />
+      <path d="M4.5 20c0-4 3.4-6.5 7.5-6.5s7.5 2.5 7.5 6.5" />
+    </>
+  ),
 };
 
 export function Icon({ name, size = 18 }: { name: keyof typeof iconPaths; size?: number }) {

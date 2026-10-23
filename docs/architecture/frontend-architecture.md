@@ -88,11 +88,11 @@ Do not optimistically mutate ancestry edges before server validation because cyc
 
 ## Visual design system
 
-- The brand is Banyan (`docs/product/banyan-spec.md` §3). Brand tokens (`--bn-*`) in `src/client/styles.css` are the colour source of truth. Two themes: Notebook (light) and Slate (dark). The theme follows the OS unless the user picks one, which sets `data-theme="notebook"` or `"slate"` on `<html>` (`src/client/theme.tsx`; an inline script in `index.html` applies the stored choice before first paint).
-- Component classes read semantic aliases (`--bg`, `--text`, `--primary`, `--danger`, ...) that are mapped once onto `--bn-*`. Do not add raw hex values in components; use the tokens.
-- Colour jobs: ink is confirmed fact and primary action; pencil is secondary text and approximate facts; red pen (`--bn-pen`) is only for "look here" and errors; highlighter (`--bn-highlight`) is only for celebrations and never for remembrance or loss. The dot grid (`--dot-grid`) appears only on the tree canvas and empty states.
-- Type is Anek (Latin, Tamil, Devanagari) from Google Fonts, with Kavivanar (`--font-hand`) reserved for short red-pen annotations. No all-caps labels. Indian-script elements get taller line heights via `:lang(...)`.
-- Brand files live in `public/brand/`. The header mark is drawn inline (`BanyanMark` in `components/AppLayout.tsx`) with tokens so it becomes the chalk mark in Slate.
+- The visual system is "Living Archive", specified in `docs/design/design-system.md`. Semantic tokens (`--canvas`, `--surface`, `--text`, `--primary`, `--danger`, `--lineage-*`, ...) in `src/client/styles.css` are the colour source of truth. Two themes: `notebook` (light) and `slate` (dark). The theme follows the OS unless the user picks one, which sets `data-theme` on `<html>` (`src/client/theme.tsx`; an inline script in `index.html` applies the stored choice before first paint).
+- Do not add raw hex values in components; use the tokens. Lineage accents are decorative only and never encode gender or relationships.
+- Type is Inter for UI and Newsreader for titles, with Noto Sans Tamil, Devanagari and Bengali for Indic scripts, all from Google Fonts. Indian-script elements get taller line heights via `:lang(...)`.
+- `AppLayout` is the app shell: a sidebar on desktop, a labelled icon rail on tablet, and a top bar plus bottom navigation below 640px.
+- Brand files live in `public/brand/`. The mark is drawn inline (`BanyanMark` in `components/AppLayout.tsx`) with tokens so it adapts to both themes.
 - Reusable React pieces live in `src/client/components/ui.tsx`. Prefer extending these over one-off markup.
 - Every data-loading page renders `Loading` while fetching, `ErrorState` when its primary data fails, and `EmptyState` for empty lists.
-- Layouts must work at phone width (360px) without horizontal scrolling.
+- Layouts must work at phone width (320px) without horizontal scrolling.
