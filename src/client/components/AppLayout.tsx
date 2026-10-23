@@ -5,7 +5,7 @@ import { useSession } from "~/client/session";
 import { useTheme } from "~/client/theme";
 
 // The kinship glyph from public/brand/banyan-mark.svg, drawn with theme tokens so the
-// same markup is the ink mark on Notebook and the chalk mark on Slate.
+// same markup works on the light and dark themes.
 export function BanyanMark({ className = "brand-mark" }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 64 64" fill="none" aria-hidden="true">
@@ -42,35 +42,64 @@ export function ThemeToggle() {
   );
 }
 
+const NAV_ITEMS = [
+  { to: "/app", label: "Home", icon: "home", end: true },
+  { to: "/app/families", label: "Families", icon: "tree", end: false },
+  { to: "/app/friends", label: "Friends", icon: "users", end: false },
+  { to: "/app/account", label: "Account", icon: "user", end: false },
+] as const;
+
+function NavLinks() {
+  return NAV_ITEMS.map((item) => (
+    <NavLink key={item.to} to={item.to} end={item.end}>
+      <Icon name={item.icon} size={20} />
+      <span>{item.label}</span>
+    </NavLink>
+  ));
+}
+
 export function AppLayout() {
   const { me } = useAuth();
   const { signOut } = useSession();
   return (
-    <>
-      <header className="topbar">
-        <div className="container topbar-inner">
-          <Brand to="/app" />
-          <nav className="mainnav" aria-label="Main">
-            <NavLink to="/app" end>
-              Home
-            </NavLink>
-            <NavLink to="/app/families">Families</NavLink>
-            <NavLink to="/app/friends">Friends</NavLink>
-            <NavLink to="/app/account">Account</NavLink>
-          </nav>
-          <div className="topbar-user">
-            <ThemeToggle />
+    <div className="shell">
+      <aside className="sidebar">
+        <Brand to="/app" />
+        <nav className="sidenav" aria-label="Main">
+          <span className="sidenav-label">Menu</span>
+          <NavLinks />
+        </nav>
+        <div className="sidebar-foot">
+          <div className="sidebar-user">
             <Avatar name={me?.displayName} size="sm" />
-            <span className="topbar-user-name">{me?.displayName}</span>
+            <span className="sidebar-user-name">{me?.displayName}</span>
+          </div>
+          <div className="sidebar-actions">
+            <ThemeToggle />
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => void signOut()}>
               Sign out
             </button>
           </div>
         </div>
+      </aside>
+
+      <header className="mobilebar">
+        <Brand to="/app" />
+        <ThemeToggle />
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => void signOut()}>
+          Sign out
+        </button>
       </header>
-      <main className="container page">
-        <Outlet />
-      </main>
-    </>
+
+      <div className="shell-main">
+        <main className="container page">
+          <Outlet />
+        </main>
+      </div>
+
+      <nav className="bottomnav" aria-label="Main">
+        <NavLinks />
+      </nav>
+    </div>
   );
 }

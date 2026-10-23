@@ -168,7 +168,7 @@ export function TreePage() {
           mediaId={p.profileMediaId}
           deceased={Boolean(p.dateOfDeath)}
         />
-        <div style={{ minWidth: 0 }}>
+        <div>
           <div className="person-node-name">{p.name}</div>
           {span && <div className="person-node-meta">{span}</div>}
           {parents.length > 0 && (
@@ -239,7 +239,9 @@ export function TreePage() {
           <div className="tree">
             {layout.generations.map((g, index) => (
               <section key={g.level} className="card generation">
-                <div className="generation-label eyebrow">Generation {index + 1}</div>
+                <div className="generation-label">
+                  <span>Generation {index + 1}</span>
+                </div>
                 <div className="generation-people">{g.people.map(renderNode)}</div>
               </section>
             ))}
