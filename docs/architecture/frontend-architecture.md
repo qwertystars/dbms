@@ -6,7 +6,7 @@ The frontend is a private authenticated web application optimized around:
 
 - family tree exploration
 - profile viewing/editing
-- family feed
+- family memories, people directory and gatherings
 - friend panel
 - family administration
 
@@ -14,22 +14,58 @@ The frontend is a private authenticated web application optimized around:
 
 ```text
 /sign-in
+/sign-up
 /invitations/:token
 
 /app
 /app/families
 /app/families/:familyId
 /app/families/:familyId/tree
+/app/families/:familyId/people
 /app/families/:familyId/people/:personId
+/app/families/:familyId/memories
 /app/families/:familyId/feed
-/app/families/:familyId/members
+/app/families/:familyId/events
 /app/friends
-/app/settings
+/app/account
 ```
+
+`/feed` is a replace-navigation redirect to `/memories`; both refer to the same
+posts API, not a new memory persistence module. Member administration remains on
+the family Overview, not a standalone `/members` page.
+
+## Family navigation and directory
+
+`FamilyHeader` and the shell use shared `FAMILY_SECTIONS`: Overview, Tree,
+Memories, People and Events. `FamilySwitcher` loads the account's families and
+preserves a recognized section when switching; a person detail becomes the other
+family's People page, never a cross-family person link. The desktop sidebar holds
+the switcher and family destinations. Below 1024px, the switcher appears above
+the page content; family section tabs remain available on every family page.
+
+`loadFamilyGraph` loads family/membership, the whole tree and members, then
+`relationIndex` derives parents, children, partners and linked-account indicators.
+The People directory uses that graph rather than the capped `/people` endpoint.
+Name search is trimmed, case-insensitive and local; results are name-sorted.
+Grid and list share filters: All, Linked accounts, Memorialized (death date),
+Needs details (missing birth date, photo or biography), and Unconnected (no
+parent, child or partner). Chips show whole-family counts, not search-result counts.
+Cards/rows link to profiles and `/tree?focus={personId}`.
 
 ## Family tree UI
 
-The tree renderer consumes an API projection of people and parent/child edges.
+The tree renderer consumes normalized `people`, parent/child `edges`, and separate
+symmetric `partners`. Partner links are not ancestry, unions or layout-generation
+constraints. The branch delivers the interactive map in `TreePage`: pan/zoom,
+focused one-hop context, progressive `+N` expansion, distinct partner connectors,
+and a person inspector beside the canvas on desktop and adapted for mobile.
+The generations view remains the fallback; generation numbers are presentation
+only. Focus/expansion and viewport state must not change persisted relationships.
+
+The Creator/Editor partner form in `TreePage` calls
+`POST /relationships/partners` with two Person IDs, then refreshes server data.
+Viewers explore without structural edit controls. The server remains authoritative
+for same-family, self-pair and duplicate checks.
 
 Requirements:
 
@@ -41,6 +77,23 @@ Requirements:
 - avoid assuming generation number is permanent identity
 
 Tree layout is presentation logic. It must never become the persistence model.
+
+## Claims, memories and events
+
+- `ClaimPanel` on family Overview supports person search/confirmation, a pending
+  state with requester cancellation, linked identity with self-unlink, and the
+  Creator's approval/rejection queue. Creator self-requests still require an
+  explicit decision. Dismissal is stored per family locally; it does not alter
+  membership or access.
+- `FeedPage` is the Memories route. `PersonTagPicker` submits up to 20 `personIds`
+  with the post composer; `PostCard` displays tagged people. Person-specific
+  memory retrieval uses the API's `personId` filter. Authors edit their own posts;
+  Creators moderate by deletion, not rewriting another author's content.
+- `EventsPage` combines stored gatherings with family-filtered derived birthdays
+  and remembrances. Any member may create a gathering and select Going, Maybe or
+  Can't go; selecting the current RSVP clears it. Counts and `myRsvp` refresh
+  after mutation. Authors and Creators see deletion controls. Event editing is
+  author-only in the API; the page currently has no edit form.
 
 ## Permission-aware UI
 
