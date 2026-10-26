@@ -197,6 +197,9 @@ export function PersonPage() {
         description={null}
         actions={
           <>
+            <Link className="btn btn-sm" to={`/app/families/${familyId}/tree?focus=${personId}`}>
+              Show in family tree
+            </Link>
             {canEdit && !editing && (
               <button type="button" className="btn btn-sm" onClick={() => setEditing(true)}>
                 Edit profile

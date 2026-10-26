@@ -42,6 +42,25 @@ Requirements:
 
 Tree layout is presentation logic. It must never become the persistence model.
 
+Implementation (see ADR-007), all under `src/client/tree/`:
+
+| Module                   | Responsibility                                                                    |
+| ------------------------ | --------------------------------------------------------------------------------- |
+| `graph.ts`               | Normalized index: dedupe, parents/children, generation columns, descendant counts |
+| `expansion.ts`           | View state (seeds, expanded down/up) and its reducer; visibility by reachability  |
+| `projection.ts`          | Graph + view state -> visible cards, toggle states and edges                      |
+| `layout.ts`              | ELK layered layout (Web Worker), fixed generation columns, fallback, cache        |
+| `camera.ts`              | Pure viewport maths: keep anchor in place, minimal reveal, fit, keyboard moves    |
+| `motion.ts`              | Reduced-motion detection and the position tween                                   |
+| `useFamilyTree.ts`       | Loads the family once, ignores stale responses, merges created edges              |
+| `FamilyGraphCanvas.tsx`  | React Flow canvas, transitions, camera, toolbar                                   |
+| `PersonNode.tsx`         | Card, expand/collapse buttons, hover preview, connector                           |
+| `PersonInspector.tsx`    | Profile pane (bottom sheet on phones)                                             |
+| `RelationshipEditor.tsx` | Parent/child form in the side pane                                                |
+| `TreeWorkspace.tsx`      | Composes the above; lazy-loaded by `pages/TreePage.tsx`                           |
+
+Domain rules here are UI-independent pure functions; React components only render them.
+
 ## Permission-aware UI
 
 The UI may hide controls the current role cannot use, but server authorization remains authoritative.

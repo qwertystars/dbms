@@ -28,3 +28,5 @@ Status: Proposed | Accepted | Superseded
 - `ADR-005-google-oauth.md` — Direct Google OAuth and revocable D1 sessions (supersedes ADR-004)
 
 - `ADR-006-password-credentials.md` — Password credentials linked to existing Google accounts
+
+- `ADR-007-interactive-family-map.md` — React Flow + ELK family map with client-side progressive expansion

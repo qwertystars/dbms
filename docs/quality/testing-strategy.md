@@ -12,6 +12,14 @@ Test the rules that would be expensive or dangerous to rediscover:
 
 Prefer real PostgreSQL integration tests for database-dependent behavior.
 
+## Client tests
+
+`tests/client/` runs in jsdom (`environmentMatchGlobs` in `vitest.config.ts`) with small
+browser-API shims in `tests/client/dom.ts`. They cover the family map: graph indexing,
+expansion and collapse by reachability, shared descendants, deterministic non-overlapping
+layout, camera maths, keyboard navigation, touch versus mouse preview, reduced motion, error
+recovery, stale-response isolation and role-dependent controls. The API is mocked at `fetch`.
+
 ## Unit tests
 
 Use for:

@@ -85,14 +85,14 @@ Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF
 - `src/client/api.ts` is a small `fetch` wrapper; authentication rides on the same-origin `banyan_session` cookie (or `auth_token` for development).
 - `src/client/auth.tsx` provides an `AuthProvider` (`/api/v1/me`) and a `RequireAuth` guard that redirects to `/sign-in?returnTo=…`.
 - Vite dev server proxies `/api` to the Hono server on `localhost:3000`.
-- Visual design ("Living Archive", `docs/design/design-system.md`, October 2026): green-on-ivory light theme (`notebook`) and deep green dark theme (`slate`), OS default plus a stored user choice (`src/client/theme.tsx`); Inter, Newsreader and Noto Sans Indic fonts from Google Fonts; 44px default controls; a responsive app shell (desktop sidebar, tablet icon rail, mobile top bar plus bottom navigation); segmented family tabs; deterministic neutral initials avatars and a muted memorial ring; a dot-grid tree canvas with generation pills, curved connectors and 72px person nodes; a landing page with a decorative family-map illustration. The Banyan mark, wordmark, favicon and app icon from `public/brand/` are kept. This supersedes the colour and type sections of `docs/product/banyan-spec.md` §3 (Anek, Kavivanar, ink/red-pen/highlighter palette, no all-caps labels).
-- Styling is a single dependency-free stylesheet, `src/client/styles.css`: semantic tokens per theme on `:root`, plus plain component classes (`.shell`, `.sidebar`, `.card`, `.btn`, `.input`, `.list`, `.tabs`, `.badge`, `.person-node`, `.reaction`, `.comment`, `.event`, and so on). There is no CSS framework. Not done: the interactive pan-and-zoom family map, person inspector, claim workflow, memories, people directory and events routes from the design proposal, the text-size setting UI (the `--bn-text-scale` hook exists), and Playwright/axe in CI.
-- Shared UI building blocks live in `src/client/components/ui.tsx` (`Loading`, `Alert`, `EmptyState`, `ErrorState`, `PageHeader`, `Card`, `Field`, `RoleBadge`, `Avatar`, `CopyField`, `useBusy`, `timeAgo`, `relativeDay`, `shortDate`, `formatDate`, `lifeSpan`, inline icons). `components/PostCard.tsx` owns the feed post card (reactions, comments, edit/delete). `FamilyHeader` (`components/FamilyNav.tsx`) renders the family name, role badge, and Overview/Tree/Feed tabs. `components/families.tsx` holds `FamilyCard` and `CreateFamilyForm`.
+- Visual design ("Living Archive", `docs/design/design-system.md`, October 2026): green-on-ivory light theme (`notebook`) and deep green dark theme (`slate`), OS default plus a stored user choice (`src/client/theme.tsx`); Inter, Newsreader and Noto Sans Indic fonts from Google Fonts; 44px default controls; a responsive app shell (desktop sidebar, tablet icon rail, mobile top bar plus bottom navigation); segmented family tabs; deterministic neutral initials avatars and a muted memorial ring; an interactive dot-grid family map (see "Interactive family map" below); a landing page with a decorative family-map illustration. The Banyan mark, wordmark, favicon and app icon from `public/brand/` are kept. This supersedes the colour and type sections of `docs/product/banyan-spec.md` §3 (Anek, Kavivanar, ink/red-pen/highlighter palette, no all-caps labels).
+- Styling is a single dependency-free stylesheet, `src/client/styles.css`: semantic tokens per theme on `:root`, plus plain component classes (`.shell`, `.sidebar`, `.card`, `.btn`, `.input`, `.list`, `.tabs`, `.badge`, `.person-node`, `.reaction`, `.comment`, `.event`, and so on). There is no CSS framework. Not done: partner/union edges on the map, claim workflow, memories, people directory and events routes from the design proposal, the text-size setting UI (the `--bn-text-scale` hook exists), and Playwright/axe in CI.
+- Shared UI building blocks live in `src/client/components/ui.tsx` (`Loading`, `Alert`, `EmptyState`, `ErrorState` (with an optional retry action), `PageHeader`, `Card`, `Field`, `RoleBadge`, `Avatar`, `CopyField`, `useBusy`, `timeAgo`, `relativeDay`, `shortDate`, `formatDate`, `lifeSpan`, inline icons). `components/PostCard.tsx` owns the feed post card (reactions, comments, edit/delete). `FamilyHeader` (`components/FamilyNav.tsx`) renders the family name, role badge, and Overview/Tree/Feed tabs. `components/families.tsx` holds `FamilyCard` and `CreateFamilyForm`.
 - Every page has loading, empty, and error states, and submit buttons show a pending state.
 - Member lists and feed posts show account display names. The friends page shows display names, lets you remove friends and cancel sent requests, and shows your own account ID with a copy button, because friend requests are still sent by account ID.
 - Role-aware UI follows the permission matrix: every member (including Viewers) can post and export; Creators and Editors can add people and relationships; only Creators can invite.
 - `src/client/api.ts` turns network failures into an error result (`status: 0`) so pages show a message instead of loading forever.
-- The tree page groups people into generations on the client (presentation only; see `layoutGenerations` in `TreePage.tsx`) and lists people with no relationships separately. Person pages show parents and children as links, loaded with `GET /tree?rootPersonId=…&depth=1`.
+- The tree page is an interactive family map (`src/client/tree/`, ADR-007; details below). People with no relationships are listed separately under the map. Person pages show parents and children as links, loaded with `GET /tree?rootPersonId=…&depth=1`, and a "Show in family tree" link that opens the map focused on that person (`/tree?focus=<personId>`).
 - `GET /families/:id/tree` returns every live person when no root is given (including people with no relationships), validates `direction`, and honours `depth`.
 - Layout is responsive and verified at 390px and 360px widths with no horizontal scrolling.
 
@@ -110,8 +110,8 @@ Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF
 
 ## Tests
 
-- `tests/setup.ts`, `tests/helpers.ts`, `tests/family.test.ts`, `tests/authorization.test.ts`, `tests/hardening.test.ts`, `tests/engagement.test.ts`, `tests/production.test.ts`.
-- 68 tests across 8 files, including Google OAuth callback and session security tests.
+- `tests/setup.ts`, `tests/helpers.ts`, `tests/family.test.ts`, `tests/authorization.test.ts`, `tests/hardening.test.ts`, `tests/engagement.test.ts`, `tests/production.test.ts`, `tests/tree-access.test.ts`, and jsdom client tests in `tests/client/`.
+- 120 tests across 11 files, including Google OAuth callback and session security tests.
 - Covers family lifecycle, invitations, role authorization, cross-family isolation, tree cycles/self-edges, expired/duplicate invitations, and friendship-without-family-access.
 - Also covers Viewer posting/export, whole-family and depth-limited tree projections, tree query validation, friend requests to unknown accounts, friend display names, and mutual friend requests.
 - New hardening coverage: development sign-in is absent and cannot mint tokens when disabled, a single-use invitation accepts exactly one account (including two concurrent acceptances), person deletion soft-deletes and detaches relationships, ownership transfer swaps roles, exports are audited, and sensitive mutations write audit events.
@@ -215,3 +215,66 @@ Created private demo username `darwin_demo`, with 21 historical profiles and
 31 parent-child edges over five generations. Tree: `/app/families/UvWF9RoFtazdXiUnxzT8V/tree`.
 Its generated password and full tree URL are stored only in the local ignored
 `.banyan-demo-credentials.json` (mode 0600). No credentials were committed.
+
+## Interactive family map (October 26, 2026)
+
+The tree page (`/app/families/:familyId/tree`) is now an interactive, horizontally expanding
+family map. Decision record: `docs/architecture/decisions/ADR-007-interactive-family-map.md`.
+No API, schema or migration changes were made.
+
+What exists:
+
+- Rendering with `@xyflow/react` 12 (pan, zoom, pinch, touch, viewport culling above 160
+  cards). Layout with `elkjs` (layered, left to right) running in a Web Worker, lazy-loaded with
+  the page; generation columns are fixed per person across the whole family, ELK orders and
+  places people inside each column; a plain column layout is the fallback if ELK fails to load.
+- Data: one `GET /families/:id` and one root-less `GET /families/:id/tree` per page load.
+  Expanding and collapsing are client-side and make no requests. Responses for a family the
+  viewer has left, or superseded by a newer load, are ignored. A failed first load shows an
+  error with "Try again"; a failed later refresh keeps the current map and shows the error.
+- Opens on the founders (people with no recorded parents, excluding someone whose every child
+  has another parent with recorded ancestry), each collapsed. `?focus=<personId>` opens on one
+  person with their parents and children.
+- Cards show photo (existing media API), name, life years and a distinct-descendant count.
+  A "+" on the right edge (with the number of hidden children) reveals children; "−" hides them.
+  A matching control on the left edge reveals or hides parents. People with nothing to reveal
+  get no control. Revealing a child also reveals the child's other recorded parents. Collapsing
+  recomputes reachability, so people still reachable through another expanded branch stay.
+  Shared descendants are a single card with every recorded incoming edge. No partner
+  relationship is inferred.
+- Hover (mouse only) shows a preview: life years, occupation, biography excerpt, parents and
+  children. Click opens an inspector pane (bottom sheet on phones) with photo, dates, occupation,
+  biography excerpt, parents and children (selecting a hidden relative reveals their branch),
+  "Open full profile", "Centre the tree here", and for Creators/Editors "Add a parent" /
+  "Add a child". Double-click centres the camera on a card.
+- Toolbar: zoom in, zoom out, fit to screen, reset to founders, and "Connect" (Creators and
+  Editors) which opens the parent/child form in the side pane. A created edge is merged from the
+  POST response and revealed without refetching. Server checks (role, cycles, duplicates,
+  audit) are unchanged.
+- Motion: 440ms position tweens, staggered card entrances, connectors that draw in, and a camera
+  that keeps the expanded person in place and pans only as far as needed (zooming out to at
+  most 0.6 when a large family does not fit). Instant under `prefers-reduced-motion`.
+- Keyboard: every card is a button; arrow keys move to children, parents and column
+  neighbours, `+` / `-` expand and collapse, Escape closes the pane. Connectors have names
+  ("A is a parent of B") for screen readers.
+- Phones: canvas fills the space between the header and the bottom navigation, no horizontal
+  page scroll (verified at 390px), toggles counter-scale with zoom to stay at least 40px on
+  screen, the bottom navigation stays usable while the sheet is open.
+
+Verification: format check, lint, type-check and `vite build` pass; 120 tests across 11 files
+pass, including 46 new client tests and 6 new server tests on tree access. The map was also
+driven in Chromium (Playwright, not committed) against a local server seeded with the
+Darwin–Wedgwood demo family: expand, collapse, co-parent merge, inspector, editor pane,
+keyboard focus, dark theme, and a touch-emulated iPhone viewport. The production bundle's main
+chunk grew by under 2 KB; the tree page loads a 214 KB (70 KB gzip) chunk and the ELK worker
+(about 1.6 MB, 450 KB gzip) on first use.
+
+Limitations:
+
+- No committed end-to-end browser tests; touch gestures (pinch, drag) are provided by React
+  Flow and were checked manually only.
+- Expansion state is not persisted between visits, apart from `?focus=`.
+- The whole family is fetched at once; there is no pagination for very large families.
+- Relationship removal is still not available in the UI.
+- Layout ordering can change between expansions (ELK re-optimizes crossings); moves are
+  animated and columns never shift.

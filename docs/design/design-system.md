@@ -128,9 +128,22 @@ All classes live in `src/client/styles.css`; React pieces live in `src/client/co
   (`avatar-tone-0..4`), never from gender. Deceased people get a thin muted ring.
 - **Feedback** `Alert` (error, success, info), `EmptyState` on dot grid, `Loading` spinner,
   `ErrorState` for failed primary data.
-- **Family tree** `.tree` is a dot-grid canvas. Each generation has a coloured pill label and a
-  curved connector to the one above. `.person-node` is a 72px-high card with a 44px avatar,
-  a two-line name and life years; hover shows a brand outline ring.
+- **Family map** (`src/client/tree/`, ADR-007). `.tree-stage` is a dot-grid canvas on
+  `--surface-sunken` that fills most of the viewport and pans and zooms inside itself (the page
+  never scrolls sideways). Generations are columns, eldest on the left. `.tree-card` is a
+  248×84 card: 48px avatar, two-line name, life years and a descendant count. A circular
+  `.tree-toggle` on the right edge shows "+" with a count of hidden children, or "−"; a matching
+  one on the left edge reveals parents. Toggles are 34px (40px on touch screens) with a 44px hit
+  area, and are counter-scaled as the map zooms out so they stay at least 24px (mouse) or 40px
+  (touch) on screen. Connectors are 2px `--border-strong` curves; those touching the selected or
+  just-expanded person use `--primary`. The selected card has a primary ring, the just-expanded
+  card a softer one. Deceased people get a quieter card and the avatar's pencil ring. Hovering a
+  card with a mouse shows `.tree-preview`; clicking opens `.tree-inspector`, a pane at the right
+  of the canvas that becomes a bottom sheet above the navigation on phones. Motion: cards move
+  over 440ms, new cards fade and scale in with a 45ms stagger, connectors draw in, the camera
+  pans just far enough to show new people. All of it is instant under reduced motion.
+- **Person chip** `.person-node` is a 72px-high card with a 44px avatar, two-line name and life
+  years, used for people who are not yet in the tree.
 - **Feed** `.composer`, `.post`, pill `.reaction` buttons and bubble `.comment`s.
 
 ## Accessibility checklist
@@ -145,8 +158,7 @@ All classes live in `src/client/styles.css`; React pieces live in `src/client/co
 These came from the October 2026 design proposal and still need product, data or API work
 before they can be built. See `docs/execution/current-state.md` for status.
 
-- An interactive pan and zoom family map with progressive `+N` expansion, a person
-  inspector and partner/union edges (needs a typed union relationship in the data model).
+- Partner/union edges on the family map (needs a typed union relationship in the data model).
 - An account-to-person claim workflow (claim requests, verifier approval, audit).
 - Memories, albums, a people directory, user-created events and family settings routes.
 - A family switcher and global search.
