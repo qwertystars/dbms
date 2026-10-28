@@ -135,13 +135,24 @@ All classes live in `src/client/styles.css`; React pieces live in `src/client/co
   (`avatar-tone-0..4`), never from gender. Deceased people get a thin muted ring.
 - **Feedback** `Alert` (error, success, info), `EmptyState` on dot grid, `Loading` spinner,
   `ErrorState` for failed primary data.
-- **Family map** is a dot-grid pan/zoom canvas with focused one-hop context and
-  progressive `+N` expansion. Partner connectors are distinct from parent/child
-  connectors; neither colour nor placement alone should imply parentage.
-  Selecting a person opens a desktop side inspector or mobile-adapted inspector.
-  The generations view remains a readable fallback with generation labels and
-  person cards; generation is never identity. `TreePage` includes the
-  Creator/Editor-only two-person partner form.
+- **Family map** (`src/client/tree/`, ADR-007). `.tree-stage` is a dot-grid canvas on
+  `--surface-sunken` that fills most of the viewport and pans and zooms inside itself (the page
+  never scrolls sideways). Generations are columns, eldest on the left. `.tree-card` is a
+  248×84 card: 48px avatar, two-line name, life years and a descendant count. A circular
+  `.tree-toggle` on the right edge shows "+" with a count of hidden children, or "−"; a matching
+  one on the left edge reveals parents. Toggles are 34px (40px on touch screens) with a 44px hit
+  area, and are counter-scaled as the map zooms out so they stay at least 24px (mouse) or 40px
+  (touch) on screen. Connectors are 2px `--border-strong` curves; those touching the selected or
+  just-expanded person use `--primary`. The selected card has a primary ring, the just-expanded
+  card a softer one. Deceased people get a quieter card and the avatar's pencil ring. Hovering a
+  card with a mouse shows `.tree-preview`; clicking opens `.tree-inspector`, a pane at the right
+  of the canvas that becomes a bottom sheet above the navigation on phones. Motion: cards move
+  over 440ms, new cards fade and scale in with a 45ms stagger, connectors draw in, the camera
+  pans just far enough to show new people. All of it is instant under reduced motion.
+  Partner links are not yet drawn on the map; `TreePage` includes the Creator/Editor-only
+  two-person partner form below the canvas.
+- **Person chip** `.person-node` is a 72px-high card with a 44px avatar, two-line name and life
+  years, used for people who are not yet in the tree.
 - **People directory** has labelled name search, Grid/List segmented controls,
   and counted filter chips: All, Linked accounts, Memorialized, Needs details,
   Unconnected. Cards/rows show avatars, life years, occupation, relationship
@@ -174,3 +185,4 @@ family switcher are implemented. See `docs/execution/current-state.md` for verif
 - Albums, global cross-family search and a dedicated family settings route.
 - Typed unions/marriages and relationship history beyond symmetric partner pairs.
 - Text-size setting UI and Playwright/axe checks in CI.
+- Partner/union connectors on the interactive family map.

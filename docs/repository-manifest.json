@@ -10,6 +10,7 @@
     "docs/architecture/decisions/ADR-001-family-graph-model.md",
     "docs/architecture/decisions/ADR-002-account-person-separation.md",
     "docs/architecture/decisions/ADR-003-modular-monolith.md",
+    "docs/architecture/decisions/ADR-007-interactive-family-map.md",
     "docs/architecture/decisions/README.md",
     "docs/architecture/frontend-architecture.md",
     "docs/contracts/api-contract.md",

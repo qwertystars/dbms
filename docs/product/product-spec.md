@@ -197,8 +197,9 @@ Friendship is not authorization.
 - Members can request to link their account to a person in the family. Only the
   Creator can approve or reject, including their own request. Requests, decisions,
   cancellations and unlinking are audited. Linking grants no additional role.
-- The tree supports focused one-generation expansion, pan/zoom, distinct partner
-  connectors, a person inspector and a generations fallback. A searchable People
+- The tree is a pan/zoom family map with one-generation expansion in both
+  directions and a person inspector. Partner links are recorded separately and
+  are not yet drawn on the map. A searchable People
   directory offers linked, memorialized, incomplete and unconnected filters.
 - Memories are family-private posts with up to 20 tagged people from that family.
   Profiles show tagged memories. The previous feed route redirects to Memories.

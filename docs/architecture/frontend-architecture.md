@@ -57,13 +57,12 @@ Cards/rows link to profiles and `/tree?focus={personId}`.
 The tree renderer consumes normalized `people`, parent/child `edges`, and separate
 symmetric `partners`. Partner links are not ancestry, unions or layout-generation
 constraints. The branch delivers the interactive map in `TreePage`: pan/zoom,
-focused one-hop context, progressive `+N` expansion, distinct partner connectors,
-and a person inspector beside the canvas on desktop and adapted for mobile.
-The generations view remains the fallback; generation numbers are presentation
-only. Focus/expansion and viewport state must not change persisted relationships.
+one-generation `+`/`−` expansion in both directions, and a person inspector
+beside the canvas on desktop and as a bottom sheet on mobile. Partner links are
+not yet drawn on the map. Generation numbers are presentation only. Focus/expansion and viewport state must not change persisted relationships.
 
 The Creator/Editor partner form in `TreePage` calls
-`POST /relationships/partners` with two Person IDs, then refreshes server data.
+`POST /relationships/partners` with two Person IDs.
 Viewers explore without structural edit controls. The server remains authoritative
 for same-family, self-pair and duplicate checks.
 
@@ -94,6 +93,27 @@ Tree layout is presentation logic. It must never become the persistence model.
   Can't go; selecting the current RSVP clears it. Counts and `myRsvp` refresh
   after mutation. Authors and Creators see deletion controls. Event editing is
   author-only in the API; the page currently has no edit form.
+
+## Family map implementation
+
+Implementation (see ADR-007), all under `src/client/tree/`:
+
+| Module                   | Responsibility                                                                    |
+| ------------------------ | --------------------------------------------------------------------------------- |
+| `graph.ts`               | Normalized index: dedupe, parents/children, generation columns, descendant counts |
+| `expansion.ts`           | View state (seeds, expanded down/up) and its reducer; visibility by reachability  |
+| `projection.ts`          | Graph + view state -> visible cards, toggle states and edges                      |
+| `layout.ts`              | ELK layered layout (Web Worker), fixed generation columns, fallback, cache        |
+| `camera.ts`              | Pure viewport maths: keep anchor in place, minimal reveal, fit, keyboard moves    |
+| `motion.ts`              | Reduced-motion detection and the position tween                                   |
+| `useFamilyTree.ts`       | Loads the family once, ignores stale responses, merges created edges              |
+| `FamilyGraphCanvas.tsx`  | React Flow canvas, transitions, camera, toolbar                                   |
+| `PersonNode.tsx`         | Card, expand/collapse buttons, hover preview, connector                           |
+| `PersonInspector.tsx`    | Profile pane (bottom sheet on phones)                                             |
+| `RelationshipEditor.tsx` | Parent/child form in the side pane                                                |
+| `TreeWorkspace.tsx`      | Composes the above; lazy-loaded by `pages/TreePage.tsx`                           |
+
+Domain rules here are UI-independent pure functions; React components only render them.
 
 ## Permission-aware UI
 

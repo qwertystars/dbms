@@ -1,154 +1,77 @@
-import { useEffect, useMemo, useState, type SubmitEvent } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Suspense, lazy, useState, type SubmitEvent } from "react";
+import { useParams } from "react-router-dom";
 import { api, errorMessage } from "~/client/api";
 import { FamilyHeader } from "~/client/components/FamilyNav";
-import { FamilyMap } from "~/client/components/FamilyMap";
-import {
-  Alert,
-  Avatar,
-  Card,
-  EmptyState,
-  ErrorState,
-  Field,
-  Loading,
-  lifeSpan,
-  useBusy,
-} from "~/client/components/ui";
+import { Alert, Card, ErrorState, Field, Loading, useBusy } from "~/client/components/ui";
+import { useFamilyTree } from "~/client/tree/useFamilyTree";
 
-interface Generation {
-  level: number;
-  people: any[];
-}
-
-/**
- * Groups people into generations for display. This is presentation logic only;
- * the persisted model is the explicit parent/child edge list.
- *
- * A person's generation is one below their deepest parent. Parents with no
- * recorded parents of their own (for example someone who married into the
- * family) are aligned one generation above their children.
- */
-function layoutGenerations(people: any[], edges: any[]) {
-  const ids = new Set(people.map((p) => p.id));
-  const parentsOf = new Map<string, string[]>();
-  const childrenOf = new Map<string, string[]>();
-  for (const e of edges) {
-    if (!ids.has(e.parentPersonId) || !ids.has(e.childPersonId)) continue;
-    parentsOf.set(e.childPersonId, [...(parentsOf.get(e.childPersonId) ?? []), e.parentPersonId]);
-    childrenOf.set(e.parentPersonId, [
-      ...(childrenOf.get(e.parentPersonId) ?? []),
-      e.childPersonId,
-    ]);
-  }
-
-  const level = new Map<string, number>();
-  const visiting = new Set<string>();
-  function depth(id: string): number {
-    const known = level.get(id);
-    if (known !== undefined) return known;
-    if (visiting.has(id)) return 0; // defensive: the server rejects cycles
-    visiting.add(id);
-    const parents = parentsOf.get(id) ?? [];
-    const value = parents.length === 0 ? 0 : 1 + Math.max(...parents.map(depth));
-    visiting.delete(id);
-    level.set(id, value);
-    return value;
-  }
-  people.forEach((p) => depth(p.id));
-
-  for (const p of people) {
-    const children = childrenOf.get(p.id) ?? [];
-    if ((parentsOf.get(p.id) ?? []).length === 0 && children.length > 0) {
-      level.set(p.id, Math.min(...children.map((c) => level.get(c) ?? 0)) - 1);
-    }
-  }
-
-  const connected = people.filter((p) => parentsOf.has(p.id) || childrenOf.has(p.id));
-  const unconnected = people.filter((p) => !parentsOf.has(p.id) && !childrenOf.has(p.id));
-
-  const byLevel = new Map<number, any[]>();
-  for (const p of connected) {
-    const l = level.get(p.id) ?? 0;
-    byLevel.set(l, [...(byLevel.get(l) ?? []), p]);
-  }
-  const generations: Generation[] = [...byLevel.entries()]
-    .sort(([a], [b]) => a - b)
-    .map(([l, list]) => ({
-      level: l,
-      people: list.sort((a, b) => (a.dateOfBirth ?? "").localeCompare(b.dateOfBirth ?? "")),
-    }));
-
-  return { generations, unconnected, parentsOf };
-}
+// The graph renderer and layout engine load with this page only.
+const TreeWorkspace = lazy(() => import("~/client/tree/TreeWorkspace"));
 
 export function TreePage() {
   const { familyId } = useParams<{ familyId: string }>();
-  const [searchParams] = useSearchParams();
-  const [view, setView] = useState<"map" | "generations">("map");
-  const [data, setData] = useState<any | null>(null);
+  const tree = useFamilyTree(familyId!);
+
+  if (tree.status === "error" && !tree.graph) {
+    return (
+      <ErrorState
+        title="Could not open this family"
+        message={tree.error ?? "Something went wrong."}
+        action={
+          <button type="button" className="btn" onClick={() => void tree.retry()}>
+            Try again
+          </button>
+        }
+      />
+    );
+  }
+  if (!tree.graph || !tree.family || !tree.role) return <Loading />;
+
+  const canEdit = tree.role === "CREATOR" || tree.role === "EDITOR";
+  const people = [...tree.graph.people.values()];
+
+  return (
+    <div className="tree-page">
+      <FamilyHeader
+        familyId={familyId!}
+        family={tree.family}
+        role={tree.role}
+        title="Family tree"
+        description="Eldest generations on the left. Press + on a card to reveal the next generation."
+      />
+      {tree.error && (
+        <Alert>
+          Couldn't refresh the tree: {tree.error}{" "}
+          <button type="button" className="btn btn-sm" onClick={() => void tree.retry()}>
+            Try again
+          </button>
+        </Alert>
+      )}
+      <Suspense fallback={<Loading label="Loading the family map…" />}>
+        <TreeWorkspace
+          key={familyId}
+          familyId={familyId!}
+          graph={tree.graph}
+          canEdit={canEdit}
+          addRelationship={tree.addRelationship}
+        />
+      </Suspense>
+      {canEdit && people.length >= 2 && <PartnerForm familyId={familyId!} people={people} />}
+    </div>
+  );
+}
+
+/** POST /relationships/partners. Partner links are separate from parenthood. */
+function PartnerForm({
+  familyId,
+  people,
+}: {
+  familyId: string;
+  people: readonly { id: string; name: string }[];
+}) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, run] = useBusy();
-
-  async function load() {
-    const family = await api("GET", `/api/v1/families/${familyId}`);
-    if (family.status !== 200) {
-      setError(errorMessage(family, "Family not found."));
-      return;
-    }
-    const tree = await api("GET", `/api/v1/families/${familyId}/tree`);
-    if (tree.status !== 200) {
-      setError(errorMessage(tree, "Could not load the family tree."));
-      return;
-    }
-    setData({
-      family: family.body.family,
-      role: family.body.membership.role,
-      people: tree.body.people || [],
-      edges: tree.body.edges || [],
-      partners: tree.body.partners || [],
-    });
-  }
-
-  useEffect(() => {
-    setData(null);
-    setError(null);
-    setNotice(null);
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [familyId]);
-
-  const layout = useMemo(() => {
-    if (!data) return null;
-    return layoutGenerations(data.people, data.edges);
-  }, [data]);
-
-  async function addEdge(e: SubmitEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const formEl = e.currentTarget;
-    const formData = new FormData(formEl);
-    const parentPersonId = formData.get("parentPersonId") as string;
-    const childPersonId = formData.get("childPersonId") as string;
-    if (!parentPersonId || !childPersonId) return;
-    if (parentPersonId === childPersonId) {
-      setError("A person cannot be their own parent.");
-      return;
-    }
-    const res = await run(() =>
-      api("POST", `/api/v1/families/${familyId}/relationships/parent-child`, {
-        parentPersonId,
-        childPersonId,
-      }),
-    );
-    if (!res || res.status !== 201) {
-      setError(res ? errorMessage(res, "Could not add relationship.") : null);
-      return;
-    }
-    formEl.reset();
-    setError(null);
-    await load();
-    setNotice("Relationship added.");
-  }
 
   async function addPartner(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -161,200 +84,46 @@ export function TreePage() {
       }),
     );
     if (!res || res.status !== 201) {
+      setNotice(null);
       setError(res ? errorMessage(res, "Could not add partners.") : null);
       return;
     }
     form.reset();
     setError(null);
-    await load();
     setNotice("Partners connected.");
   }
 
-  if (error && !data) return <ErrorState title="Could not open this family" message={error} />;
-  if (!data || !layout) return <Loading />;
-
-  const nameOf = new Map<string, string>(data.people.map((p: any) => [p.id, p.name]));
-  const personLink = (id: string) => `/app/families/${familyId}/people/${id}`;
-  const hasTree = layout.generations.length > 0;
-
-  function renderNode(p: any) {
-    const parents = (layout!.parentsOf.get(p.id) ?? []).map((id) => nameOf.get(id) ?? "Unknown");
-    const span = lifeSpan(p);
-    return (
-      <Link
-        key={p.id}
-        to={personLink(p.id)}
-        className={`person-node${p.dateOfDeath ? " deceased" : ""}`}
-      >
-        <Avatar
-          name={p.name}
-          size="sm"
-          mediaId={p.profileMediaId}
-          deceased={Boolean(p.dateOfDeath)}
-        />
-        <div>
-          <div className="person-node-name">{p.name}</div>
-          {span && <div className="person-node-meta">{span}</div>}
-          {parents.length > 0 && (
-            <div className="person-node-meta">Child of {parents.join(" & ")}</div>
-          )}
-        </div>
-      </Link>
-    );
-  }
-
   return (
-    <>
-      <FamilyHeader
-        familyId={familyId!}
-        family={data.family}
-        role={data.role}
-        title="Family tree"
-        description="Every connection tells a story. Choose a person and explore their family."
-      />
-
-      <div className="stack">
+    <Card title="Connect partners" description="A partner connection is separate from parenthood.">
+      <form onSubmit={addPartner} className="form">
         {error && <Alert onClose={() => setError(null)}>{error}</Alert>}
         {notice && (
           <Alert kind="success" onClose={() => setNotice(null)}>
             {notice}
           </Alert>
         )}
-
-        <div className="segmented" role="group" aria-label="Tree view">
-          <button
-            type="button"
-            className={view === "map" ? "active" : ""}
-            aria-pressed={view === "map"}
-            onClick={() => setView("map")}
-          >
-            Map
-          </button>
-          <button
-            type="button"
-            className={view === "generations" ? "active" : ""}
-            aria-pressed={view === "generations"}
-            onClick={() => setView("generations")}
-          >
-            Generations
+        <div className="form-grid">
+          {["personAId", "personBId"].map((name, i) => (
+            <Field key={name} label={`Person ${i + 1}`}>
+              <select className="select" name={name} required defaultValue="">
+                <option value="" disabled>
+                  Select a person…
+                </option>
+                {people.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          ))}
+        </div>
+        <div>
+          <button type="submit" className="btn btn-primary" disabled={busy}>
+            {busy ? "Adding…" : "Connect partners"}
           </button>
         </div>
-
-        {view === "map" && data.people.length > 0 && (
-          <FamilyMap
-            key={`${familyId}:${searchParams.get("focus") ?? ""}`}
-            familyId={familyId ?? ""}
-            initialFocus={searchParams.get("focus") ?? undefined}
-            graph={{ people: data.people, edges: data.edges, partners: data.partners, members: [] }}
-          />
-        )}
-
-        {data.role !== "VIEWER" && data.people.length >= 2 && (
-          <Card title="Connect a parent and child">
-            <form onSubmit={addEdge} className="form">
-              <div className="form-grid">
-                <Field label="Parent">
-                  <select className="select" name="parentPersonId" required defaultValue="">
-                    <option value="" disabled>
-                      Select a person…
-                    </option>
-                    {data.people.map((p: any) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Child">
-                  <select className="select" name="childPersonId" required defaultValue="">
-                    <option value="" disabled>
-                      Select a person…
-                    </option>
-                    {data.people.map((p: any) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-              </div>
-              <div>
-                <button type="submit" className="btn btn-primary" disabled={busy}>
-                  {busy ? "Adding…" : "Add relationship"}
-                </button>
-              </div>
-            </form>
-          </Card>
-        )}
-
-        {view === "generations" &&
-          (hasTree ? (
-            <div className="tree">
-              {layout.generations.map((g, index) => (
-                <section key={g.level} className="card generation">
-                  <div className="generation-label">
-                    <span>Generation {index + 1}</span>
-                  </div>
-                  <div className="generation-people">{g.people.map(renderNode)}</div>
-                </section>
-              ))}
-            </div>
-          ) : (
-            <div className="card">
-              <EmptyState title="No relationships yet">
-                {data.people.length < 2
-                  ? "Add at least two people on the Overview tab, then connect them here."
-                  : data.role === "VIEWER"
-                    ? "Editors of this family can connect parents and children."
-                    : "Connect a parent and child above to start building the tree."}
-              </EmptyState>
-            </div>
-          ))}
-
-        {view === "generations" && layout.unconnected.length > 0 && (
-          <Card
-            title="Not yet in the tree"
-            description="These people have no parent or child relationships."
-          >
-            <div className="generation-people">{layout.unconnected.map(renderNode)}</div>
-          </Card>
-        )}
-        {data.people.length === 0 && (
-          <EmptyState title="Your family starts here">
-            Add a person on the Overview tab to begin.
-          </EmptyState>
-        )}
-        {data.role !== "VIEWER" && data.people.length >= 2 && (
-          <Card
-            title="Connect partners"
-            description="A partner connection is separate from parenthood."
-          >
-            <form onSubmit={addPartner} className="form">
-              <div className="form-grid">
-                {["personAId", "personBId"].map((name, i) => (
-                  <Field key={name} label={`Person ${i + 1}`}>
-                    <select className="select" name={name} required defaultValue="">
-                      <option value="" disabled>
-                        Select a person…
-                      </option>
-                      {data.people.map((p: { id: string; name: string }) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                ))}
-              </div>
-              <div>
-                <button type="submit" className="btn btn-primary" disabled={busy}>
-                  {busy ? "Adding…" : "Connect partners"}
-                </button>
-              </div>
-            </form>
-          </Card>
-        )}
-      </div>
-    </>
+      </form>
+    </Card>
   );
 }

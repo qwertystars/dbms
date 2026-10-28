@@ -44,12 +44,22 @@ export function EmptyState({ title, children }: { title: string; children?: Reac
 }
 
 /** Full-page error used when a route's primary data cannot be loaded. */
-export function ErrorState({ title, message }: { title: string; message: string }) {
+export function ErrorState({
+  title,
+  message,
+  action,
+}: {
+  title: string;
+  message: string;
+  /** Optional recovery control, e.g. a retry button. */
+  action?: ReactNode;
+}) {
   return (
     <div className="card">
       <div className="empty">
         <p className="empty-title">{title}</p>
         <p>{message}</p>
+        {action && <div className="empty-action">{action}</div>}
       </div>
     </div>
   );
@@ -364,6 +374,34 @@ const iconPaths: Record<string, ReactNode> = {
       <path d="M4.5 20c0-4 3.4-6.5 7.5-6.5s7.5 2.5 7.5 6.5" />
     </>
   ),
+  zoomIn: (
+    <>
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="M15.5 15.5 20 20M10.5 7.5v6M7.5 10.5h6" />
+    </>
+  ),
+  zoomOut: (
+    <>
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="M15.5 15.5 20 20M7.5 10.5h6" />
+    </>
+  ),
+  fit: <path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" />,
+  reset: (
+    <>
+      <path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3" />
+      <path d="M4.5 4.5v4h4" />
+    </>
+  ),
+  link: (
+    <>
+      <circle cx="6" cy="12" r="2.5" />
+      <circle cx="18" cy="6" r="2.5" />
+      <circle cx="18" cy="18" r="2.5" />
+      <path d="M8.5 12c4 0 5-6 7-6M8.5 12c4 0 5 6 7 6" />
+    </>
+  ),
+  chevron: <path d="M9 6l6 6-6 6" />,
 };
 
 export function Icon({ name, size = 18 }: { name: keyof typeof iconPaths; size?: number }) {
