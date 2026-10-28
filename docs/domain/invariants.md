@@ -88,6 +88,40 @@ These properties must remain true regardless of UI behavior.
 
 **Reason:** A family-tree person should not be claimed by two application accounts.
 
+**Enforced by:** partial unique index on active `(family_id, person_id)` and
+approval-time service checks. The optional link is membership-scoped, not an
+Account/Person identity merge.
+
+## INV-PARTNER-01 — Unique symmetric same-family pair
+
+**Statement:** A partner link joins two distinct live people in one family, is
+stored in canonical ID order, and is unique regardless of input order.
+It never implies ancestry or participates in ancestry cycle detection.
+
+**Enforced by:** Creator/Editor service authorization, live same-family validation,
+ID sorting, and unique `(family_id, person_a_id, person_b_id)`.
+The schema and migration `0003_safe_deathstrike.sql` enforce the
+`partner_ordered_pair` CHECK, rejecting self-pairs and noncanonical order.
+
+## INV-CLAIM-01 — Explicit Creator approval
+
+**Statement:** Requesting a link cannot assign `personId`. Only an active Creator's
+approval of a pending request may link an active unlinked membership to a live,
+same-family Person not linked to another active membership. This grants no role
+and mutates no graph edges. Creator self-claims also require an explicit decision.
+
+## INV-CLAIM-02 — Request scope and lifecycle
+
+**Statement:** At most one pending claim exists per membership. Only pending
+requests may be decided or cancelled. Only the requester may cancel; only the
+Creator may decide. Creator lists are pending-only across the family; other
+members see only their own history. Unlinking is self-only.
+
+**Enforced by:** service membership/ownership checks, partial unique
+pending-membership index, and conditional `PENDING` transitions inside atomic
+batches. Approval links only while the request is pending and both targets are
+still eligible; unsuccessful transitions cannot leave decision audits.
+
 ## INV-FRIEND-01 — No self-friendship
 
 **Statement:** An Account cannot have a friendship or friend request with itself.
@@ -101,6 +135,30 @@ These properties must remain true regardless of UI behavior.
 ## INV-POST-01 — Post author was authorized at creation
 
 **Statement:** A post can be created only by an active member of its family.
+
+## INV-POST-02 — Same-family memory tags
+
+**Statement:** API create/update accepts at most 20 submitted `personIds`; stored
+tags are unique per post/person and reference live people in that post's family.
+Only authors may edit tags; a person filter never bypasses family membership.
+
+**Enforced by:** Zod array limit, service deduplication/live-family validation,
+composite primary key, and person-deletion cleanup. The limit and same-family
+rule are application checks, not database CHECK constraints. Post body and tag
+updates share an atomic batch after validation.
+
+## INV-EVENT-01 — Event ownership and RSVP isolation
+
+**Statement:** Only active members may read/create family events or respond.
+Only the author may edit; author or Creator may soft-delete. Only the caller's
+own RSVP may be replaced/cleared, with one response per event/account.
+
+**Enforced by:** membership and ownership checks, live family-scoped event lookup,
+Zod response enum, and composite RSVP primary key.
+
+**Verification for partner, claim, event and tag rules:** API regression cases in
+`tests/graph-features.test.ts`, including role/outsider denials, cross-family
+partner/tag rejection, duplicate/conflicting claims and deletion cleanup.
 
 ## INV-MEDIA-01 — Media ownership is explicit
 
@@ -118,7 +176,12 @@ These properties must remain true regardless of UI behavior.
 
 ## Current compliance
 
-Project is greenfield and unimplemented. Therefore all implementation-dependent invariants are currently **NOT YET ENFORCED**, not "violated by an existing system".
+The application is implemented; enforcement is split between service checks,
+schema constraints and migration SQL. Do not infer full compliance from a schema
+declaration alone. This branch adds partner, claim, event/RSVP and memory-tag
+coverage in `tests/graph-features.test.ts`; this documentation-only pass read those
+tests but did not execute them. Known enforcement gaps are recorded in
+`docs/execution/current-state.md`.
 
 ## Direct Google authentication (October 11, 2026)
 

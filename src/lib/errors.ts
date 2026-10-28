@@ -27,6 +27,17 @@ export const Errors = {
     new AppError("TREE_DUPLICATE_EDGE", message, 409),
   TREE_CYCLE: (message = "This relationship would create an ancestry cycle.") =>
     new AppError("TREE_CYCLE", message, 409),
+  PARTNER_SELF: () => new AppError("PARTNER_SELF", "A person cannot be their own partner.", 409),
+  PARTNER_DUPLICATE: (message = "These people are already recorded as partners.") =>
+    new AppError("PARTNER_DUPLICATE", message, 409),
+  CLAIM_PENDING: (message = "You already have a pending claim in this family.") =>
+    new AppError("CLAIM_PENDING", message, 409),
+  CLAIM_ALREADY_LINKED: (message = "Your membership is already linked to a person.") =>
+    new AppError("CLAIM_ALREADY_LINKED", message, 409),
+  CLAIM_CONFLICT: (message = "This person is already linked to another member.") =>
+    new AppError("CLAIM_CONFLICT", message, 409),
+  CLAIM_NOT_PENDING: (message = "This claim request has already been decided.") =>
+    new AppError("CLAIM_NOT_PENDING", message, 409),
   INVITATION_EXPIRED: (message = "Invitation has expired.") =>
     new AppError("INVITATION_EXPIRED", message, 400),
   INVITATION_USED: (message = "Invitation has already been used.") =>

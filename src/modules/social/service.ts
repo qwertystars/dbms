@@ -1,6 +1,16 @@
 import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { nanoid } from "nanoid";
 import { db } from "~/lib/db";
-import { accounts, auditEvents, comments, familyMemberships, posts, reactions } from "~/db/schema";
+import {
+  accounts,
+  auditEvents,
+  comments,
+  familyMemberships,
+  people,
+  postPersonTags,
+  posts,
+  reactions,
+} from "~/db/schema";
 import { Errors } from "~/lib/errors";
 import type { Account } from "~/lib/context";
 import { auditValues } from "~/modules/audit/service";
@@ -8,6 +18,20 @@ import type { ReactionType } from "~/db/schema";
 
 export interface PostInput {
   body: string;
+  personIds?: string[];
+}
+
+async function verifyTaggablePeople(familyId: string, personIds: string[]) {
+  const unique = Array.from(new Set(personIds));
+  if (unique.length === 0) return unique;
+  const rows = await db
+    .select({ id: people.id })
+    .from(people)
+    .where(
+      and(inArray(people.id, unique), eq(people.familyId, familyId), isNull(people.deletedAt)),
+    );
+  if (rows.length !== unique.length) throw Errors.PERSON_NOT_IN_FAMILY();
+  return unique;
 }
 
 export type ReactionSummary = Record<ReactionType, number>;
@@ -19,15 +43,32 @@ function emptyReactions(): ReactionSummary {
 export async function createPost(account: Account, familyId: string, input: PostInput) {
   // Any active member may post, including Viewers (see the permission matrix).
   await requireActiveMembership(account.id, familyId);
-  const [post] = await db
-    .insert(posts)
-    .values({
-      familyId,
-      authorAccountId: account.id,
-      body: input.body,
-    })
-    .returning();
-  return post;
+  const personIds = await verifyTaggablePeople(familyId, input.personIds ?? []);
+  const postId = nanoid();
+  const [[post]] = await db.batch([
+    db
+      .insert(posts)
+      .values({ id: postId, familyId, authorAccountId: account.id, body: input.body })
+      .returning(),
+    ...personIds.map((personId) => db.insert(postPersonTags).values({ postId, personId })),
+  ]);
+  return {
+    ...post,
+    taggedPeople: await taggedPeopleFor([post.id]).then((m) => m.get(post.id) ?? []),
+  };
+}
+
+async function taggedPeopleFor(postIds: string[]) {
+  const rows = await db
+    .select({ postId: postPersonTags.postId, id: people.id, name: people.name })
+    .from(postPersonTags)
+    .innerJoin(people, eq(postPersonTags.personId, people.id))
+    .where(and(inArray(postPersonTags.postId, postIds), isNull(people.deletedAt)));
+  const map = new Map<string, { id: string; name: string }[]>();
+  for (const row of rows) {
+    map.set(row.postId, [...(map.get(row.postId) ?? []), { id: row.id, name: row.name }]);
+  }
+  return map;
 }
 
 interface Cursor {
@@ -43,9 +84,27 @@ function parseCursor(cursor?: string): Cursor | null {
   return { at, id: id || null };
 }
 
-export async function listPosts(account: Account, familyId: string, cursor?: string, limit = 20) {
+export async function listPosts(
+  account: Account,
+  familyId: string,
+  cursor?: string,
+  limit = 20,
+  taggedPersonId?: string,
+) {
   await requireActiveMembership(account.id, familyId);
-  const base = and(eq(posts.familyId, familyId), isNull(posts.deletedAt));
+  const base = and(
+    eq(posts.familyId, familyId),
+    isNull(posts.deletedAt),
+    taggedPersonId
+      ? inArray(
+          posts.id,
+          db
+            .select({ postId: postPersonTags.postId })
+            .from(postPersonTags)
+            .where(eq(postPersonTags.personId, taggedPersonId)),
+        )
+      : undefined,
+  );
   const parsed = parseCursor(cursor);
   // Timestamps have second precision, so the id is part of the cursor to keep
   // posts created within the same second from being skipped.
@@ -76,7 +135,7 @@ export async function listPosts(account: Account, familyId: string, cursor?: str
   if (items.length === 0) return { posts: [], nextCursor };
 
   const postIds = items.map((p) => p.id);
-  const [reactionRows, commentRows, myReactionRows] = await Promise.all([
+  const [reactionRows, commentRows, myReactionRows, tags] = await Promise.all([
     db
       .select({
         postId: reactions.postId,
@@ -95,6 +154,7 @@ export async function listPosts(account: Account, familyId: string, cursor?: str
       .select({ postId: reactions.postId, type: reactions.type })
       .from(reactions)
       .where(and(inArray(reactions.postId, postIds), eq(reactions.accountId, account.id))),
+    taggedPeopleFor(postIds),
   ]);
 
   const reactionCounts = new Map<string, ReactionSummary>();
@@ -123,6 +183,7 @@ export async function listPosts(account: Account, familyId: string, cursor?: str
       reactionCounts: reactionCounts.get(post.id) ?? emptyReactions(),
       commentCount: commentCounts.get(post.id) ?? 0,
       myReaction: myReactions.get(post.id) ?? null,
+      taggedPeople: tags.get(post.id) ?? [],
     })),
     nextCursor,
   };
@@ -146,12 +207,23 @@ export async function updatePost(
   const post = await getPost(account, familyId, postId);
   if (post.authorAccountId !== account.id)
     throw Errors.FORBIDDEN("You can only edit your own posts.");
-  const [updated] = await db
-    .update(posts)
-    .set({ body: input.body, updatedAt: new Date() })
-    .where(eq(posts.id, postId))
-    .returning();
-  return updated;
+  const personIds = input.personIds
+    ? await verifyTaggablePeople(familyId, input.personIds)
+    : undefined;
+  const [[updated]] = await db.batch([
+    db
+      .update(posts)
+      .set({ body: input.body, updatedAt: new Date() })
+      .where(eq(posts.id, postId))
+      .returning(),
+    ...(personIds
+      ? [
+          db.delete(postPersonTags).where(eq(postPersonTags.postId, postId)),
+          ...personIds.map((personId) => db.insert(postPersonTags).values({ postId, personId })),
+        ]
+      : []),
+  ]);
+  return { ...updated, taggedPeople: (await taggedPeopleFor([postId])).get(postId) ?? [] };
 }
 
 export async function deletePost(account: Account, familyId: string, postId: string) {

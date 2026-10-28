@@ -11,6 +11,8 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Client components (the family map) run in a simulated browser.
+    environmentMatchGlobs: [["tests/client/**", "jsdom"]],
     globals: true,
     setupFiles: ["./tests/setup.ts"],
     env: {

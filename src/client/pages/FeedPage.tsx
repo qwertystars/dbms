@@ -4,11 +4,14 @@ import { api, errorMessage } from "~/client/api";
 import { useAuth } from "~/client/auth";
 import { FamilyHeader } from "~/client/components/FamilyNav";
 import { PostCard, type FeedPost } from "~/client/components/PostCard";
+import { PersonTagPicker } from "~/client/components/PersonTagPicker";
+import type { PersonSummary } from "~/client/family-data";
 import { Alert, Avatar, EmptyState, ErrorState, Loading, useBusy } from "~/client/components/ui";
 
 interface FeedData {
   family: any;
   role: string;
+  people: PersonSummary[];
   posts: FeedPost[];
   nextCursor?: string;
 }
@@ -20,6 +23,7 @@ export function FeedPage() {
   const [error, setError] = useState<string | null>(null);
   const [posting, runPost] = useBusy();
   const [loadingMore, runMore] = useBusy();
+  const [tagged, setTagged] = useState<string[]>([]);
 
   async function load() {
     const family = await api("GET", `/api/v1/families/${familyId}`);
@@ -27,10 +31,14 @@ export function FeedPage() {
       setError(errorMessage(family, "Family not found."));
       return;
     }
-    const feed = await api("GET", `/api/v1/families/${familyId}/posts`);
+    const [feed, people] = await Promise.all([
+      api("GET", `/api/v1/families/${familyId}/posts`),
+      api("GET", `/api/v1/families/${familyId}/tree`),
+    ]);
     setData({
       family: family.body.family,
       role: family.body.membership.role,
+      people: people.body.people || [],
       posts: feed.body.posts || [],
       nextCursor: feed.body.nextCursor,
     });
@@ -39,6 +47,7 @@ export function FeedPage() {
   useEffect(() => {
     setData(null);
     setError(null);
+    setTagged([]);
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [familyId]);
@@ -48,12 +57,15 @@ export function FeedPage() {
     const formEl = e.currentTarget;
     const body = ((new FormData(formEl).get("body") as string) || "").trim();
     if (!body) return;
-    const res = await runPost(() => api("POST", `/api/v1/families/${familyId}/posts`, { body }));
+    const res = await runPost(() =>
+      api("POST", `/api/v1/families/${familyId}/posts`, { body, personIds: tagged }),
+    );
     if (!res || res.status !== 201) {
       setError(res ? errorMessage(res, "Could not publish post.") : null);
       return;
     }
     formEl.reset();
+    setTagged([]);
     setError(null);
     await load();
   }
@@ -104,8 +116,8 @@ export function FeedPage() {
         familyId={familyId!}
         family={data.family}
         role={data.role}
-        title="Feed"
-        description="Updates shared with everyone in this family."
+        title="Memories"
+        description="Stories, updates and moments shared with this family only."
       />
 
       <div className="feed">
@@ -125,8 +137,11 @@ export function FeedPage() {
               />
             </label>
           </div>
+          {data.people.length > 0 && (
+            <PersonTagPicker people={data.people} selected={tagged} onChange={setTagged} />
+          )}
           <div className="composer-footer">
-            <span className="subtle">Photos, milestones and everyday moments all belong here.</span>
+            <span className="subtle">Visible to {data.family.name} only.</span>
             <button type="submit" className="btn btn-primary" disabled={posting}>
               {posting ? "Posting…" : "Share"}
             </button>
@@ -135,7 +150,9 @@ export function FeedPage() {
 
         {data.posts.length === 0 ? (
           <div className="card">
-            <EmptyState title="No posts yet">Be the first to share an update.</EmptyState>
+            <EmptyState title="No memories yet">
+              Be the first to share a story, a photo or a small update.
+            </EmptyState>
           </div>
         ) : (
           data.posts.map((post) => (

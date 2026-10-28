@@ -6,7 +6,10 @@ import {
   familyMemberships,
   mediaAssets,
   parentChildRelationships,
+  partnerRelationships,
   people,
+  personClaimRequests,
+  postPersonTags,
 } from "~/db/schema";
 import { Errors } from "~/lib/errors";
 import type { Account } from "~/lib/context";
@@ -151,6 +154,21 @@ export async function deletePerson(account: Account, familyId: string, personId:
           eq(parentChildRelationships.parentPersonId, personId),
           eq(parentChildRelationships.childPersonId, personId),
         ),
+      ),
+    db
+      .delete(partnerRelationships)
+      .where(
+        or(
+          eq(partnerRelationships.personAId, personId),
+          eq(partnerRelationships.personBId, personId),
+        ),
+      ),
+    db.delete(postPersonTags).where(eq(postPersonTags.personId, personId)),
+    db
+      .update(personClaimRequests)
+      .set({ status: "CANCELLED", decidedAt: now })
+      .where(
+        and(eq(personClaimRequests.personId, personId), eq(personClaimRequests.status, "PENDING")),
       ),
     db
       .update(familyMemberships)

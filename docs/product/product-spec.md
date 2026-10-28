@@ -190,6 +190,25 @@ An account may read family data only when it has an active membership in that fa
 
 Friendship is not authorization.
 
+## Family graph and engagement
+
+- Partner connections are symmetric, same-family records between distinct people.
+  Creators and Editors manage them; they never imply parenthood or family access.
+- Members can request to link their account to a person in the family. Only the
+  Creator can approve or reject, including their own request. Requests, decisions,
+  cancellations and unlinking are audited. Linking grants no additional role.
+- The tree is a pan/zoom family map with one-generation expansion in both
+  directions and a person inspector. Partner links are recorded separately and
+  are not yet drawn on the map. A searchable People
+  directory offers linked, memorialized, incomplete and unconnected filters.
+- Memories are family-private posts with up to 20 tagged people from that family.
+  Profiles show tagged memories. The previous feed route redirects to Memories.
+- Every active member can create family gatherings and RSVP Going, Maybe or Not
+  going. Only the author edits; the author or Creator deletes. Birthdays and
+  remembrances are derived separately from profile dates.
+- The shell provides a family switcher and family-specific navigation without
+  carrying person IDs into another family.
+
 ## Data retention baseline
 
 - Normal family data remains until an authorized user deletes it.
