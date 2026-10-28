@@ -2,6 +2,7 @@ import { useEffect, useState, type SubmitEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, errorMessage } from "~/client/api";
 import { useAuth } from "~/client/auth";
+import { ClaimPanel } from "~/client/components/ClaimPanel";
 import { FamilyHeader } from "~/client/components/FamilyNav";
 import {
   Alert,
@@ -37,7 +38,7 @@ export function FamilyPage() {
     }
     const [members, people] = await Promise.all([
       api("GET", `/api/v1/families/${familyId}/members`),
-      api("GET", `/api/v1/families/${familyId}/people`),
+      api("GET", `/api/v1/families/${familyId}/tree`),
     ]);
     setData({
       family: family.body.family,
@@ -147,6 +148,19 @@ export function FamilyPage() {
             {notice}
           </Alert>
         )}
+
+        <ClaimPanel
+          key={familyId}
+          familyId={familyId!}
+          role={role}
+          myPersonId={data.membership.personId ?? null}
+          people={data.people}
+          linkedPersonIds={
+            new Set(data.members.map((m: any) => m.personId).filter(Boolean) as string[])
+          }
+          onChanged={() => void load()}
+          onError={setError}
+        />
 
         <div className="grid-2">
           <div className="stack">

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type SubmitEvent } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api, errorMessage } from "~/client/api";
 import { FamilyHeader } from "~/client/components/FamilyNav";
+import { FamilyMap } from "~/client/components/FamilyMap";
 import {
   Alert,
   Avatar,
@@ -82,6 +83,8 @@ function layoutGenerations(people: any[], edges: any[]) {
 
 export function TreePage() {
   const { familyId } = useParams<{ familyId: string }>();
+  const [searchParams] = useSearchParams();
+  const [view, setView] = useState<"map" | "generations">("map");
   const [data, setData] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -103,6 +106,7 @@ export function TreePage() {
       role: family.body.membership.role,
       people: tree.body.people || [],
       edges: tree.body.edges || [],
+      partners: tree.body.partners || [],
     });
   }
 
@@ -146,6 +150,26 @@ export function TreePage() {
     setNotice("Relationship added.");
   }
 
+  async function addPartner(e: SubmitEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const values = new FormData(form);
+    const res = await run(() =>
+      api("POST", `/api/v1/families/${familyId}/relationships/partners`, {
+        personAId: values.get("personAId"),
+        personBId: values.get("personBId"),
+      }),
+    );
+    if (!res || res.status !== 201) {
+      setError(res ? errorMessage(res, "Could not add partners.") : null);
+      return;
+    }
+    form.reset();
+    setError(null);
+    await load();
+    setNotice("Partners connected.");
+  }
+
   if (error && !data) return <ErrorState title="Could not open this family" message={error} />;
   if (!data || !layout) return <Loading />;
 
@@ -186,7 +210,7 @@ export function TreePage() {
         family={data.family}
         role={data.role}
         title="Family tree"
-        description="Generations are arranged from the eldest at the top."
+        description="Every connection tells a story. Choose a person and explore their family."
       />
 
       <div className="stack">
@@ -195,6 +219,34 @@ export function TreePage() {
           <Alert kind="success" onClose={() => setNotice(null)}>
             {notice}
           </Alert>
+        )}
+
+        <div className="segmented" role="group" aria-label="Tree view">
+          <button
+            type="button"
+            className={view === "map" ? "active" : ""}
+            aria-pressed={view === "map"}
+            onClick={() => setView("map")}
+          >
+            Map
+          </button>
+          <button
+            type="button"
+            className={view === "generations" ? "active" : ""}
+            aria-pressed={view === "generations"}
+            onClick={() => setView("generations")}
+          >
+            Generations
+          </button>
+        </div>
+
+        {view === "map" && data.people.length > 0 && (
+          <FamilyMap
+            key={`${familyId}:${searchParams.get("focus") ?? ""}`}
+            familyId={familyId ?? ""}
+            initialFocus={searchParams.get("focus") ?? undefined}
+            graph={{ people: data.people, edges: data.edges, partners: data.partners, members: [] }}
+          />
         )}
 
         {data.role !== "VIEWER" && data.people.length >= 2 && (
@@ -235,35 +287,71 @@ export function TreePage() {
           </Card>
         )}
 
-        {hasTree ? (
-          <div className="tree">
-            {layout.generations.map((g, index) => (
-              <section key={g.level} className="card generation">
-                <div className="generation-label">
-                  <span>Generation {index + 1}</span>
-                </div>
-                <div className="generation-people">{g.people.map(renderNode)}</div>
-              </section>
-            ))}
-          </div>
-        ) : (
-          <div className="card">
-            <EmptyState title="No relationships yet">
-              {data.people.length < 2
-                ? "Add at least two people on the Overview tab, then connect them here."
-                : data.role === "VIEWER"
-                  ? "Editors of this family can connect parents and children."
-                  : "Connect a parent and child above to start building the tree."}
-            </EmptyState>
-          </div>
-        )}
+        {view === "generations" &&
+          (hasTree ? (
+            <div className="tree">
+              {layout.generations.map((g, index) => (
+                <section key={g.level} className="card generation">
+                  <div className="generation-label">
+                    <span>Generation {index + 1}</span>
+                  </div>
+                  <div className="generation-people">{g.people.map(renderNode)}</div>
+                </section>
+              ))}
+            </div>
+          ) : (
+            <div className="card">
+              <EmptyState title="No relationships yet">
+                {data.people.length < 2
+                  ? "Add at least two people on the Overview tab, then connect them here."
+                  : data.role === "VIEWER"
+                    ? "Editors of this family can connect parents and children."
+                    : "Connect a parent and child above to start building the tree."}
+              </EmptyState>
+            </div>
+          ))}
 
-        {layout.unconnected.length > 0 && (
+        {view === "generations" && layout.unconnected.length > 0 && (
           <Card
             title="Not yet in the tree"
             description="These people have no parent or child relationships."
           >
             <div className="generation-people">{layout.unconnected.map(renderNode)}</div>
+          </Card>
+        )}
+        {data.people.length === 0 && (
+          <EmptyState title="Your family starts here">
+            Add a person on the Overview tab to begin.
+          </EmptyState>
+        )}
+        {data.role !== "VIEWER" && data.people.length >= 2 && (
+          <Card
+            title="Connect partners"
+            description="A partner connection is separate from parenthood."
+          >
+            <form onSubmit={addPartner} className="form">
+              <div className="form-grid">
+                {["personAId", "personBId"].map((name, i) => (
+                  <Field key={name} label={`Person ${i + 1}`}>
+                    <select className="select" name={name} required defaultValue="">
+                      <option value="" disabled>
+                        Select a person…
+                      </option>
+                      {data.people.map((p: { id: string; name: string }) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                ))}
+              </div>
+              <div>
+                <button type="submit" className="btn btn-primary" disabled={busy}>
+                  {busy ? "Adding…" : "Connect partners"}
+                </button>
+              </div>
+            </form>
           </Card>
         )}
       </div>

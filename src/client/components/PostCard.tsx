@@ -1,4 +1,5 @@
 import { useState, type SubmitEvent } from "react";
+import { Link } from "react-router-dom";
 import { api, errorMessage } from "~/client/api";
 import { Avatar, Icon, Loading, timeAgo, useBusy } from "~/client/components/ui";
 
@@ -21,6 +22,7 @@ export interface FeedPost {
   reactionCounts?: Record<string, number>;
   commentCount?: number;
   myReaction?: string | null;
+  taggedPeople?: { id: string; name: string }[];
 }
 
 export interface FeedComment {
@@ -218,6 +220,21 @@ export function PostCard({ familyId, post, me, role, onPatch, onRemove, onError 
             </form>
           ) : (
             <p className="post-body">{post.body}</p>
+          )}
+
+          {post.taggedPeople && post.taggedPeople.length > 0 && (
+            <p className="post-tags">
+              <span className="subtle">With</span>
+              {post.taggedPeople.map((person) => (
+                <Link
+                  key={person.id}
+                  className="chip"
+                  to={`/app/families/${familyId}/people/${person.id}`}
+                >
+                  {person.name}
+                </Link>
+              ))}
+            </p>
           )}
 
           <footer className="post-footer">

@@ -112,6 +112,13 @@ whole ramp.
 
 Main content is centred with a 1260px maximum width. The landing page keeps its own top bar.
 
+The desktop sidebar includes a family switcher and shared Overview, Tree, Memories,
+People and Events destinations. On tablet and phone, the switcher sits above page
+content. Switching retains a recognized section, not a person ID. Family headers
+repeat these sections as tabs, including on mobile.
+The Memories destination is `/app/families/:familyId/memories`; old `/feed`
+links redirect there with history replacement.
+
 ## Components
 
 All classes live in `src/client/styles.css`; React pieces live in `src/client/components/ui.tsx`.
@@ -128,10 +135,29 @@ All classes live in `src/client/styles.css`; React pieces live in `src/client/co
   (`avatar-tone-0..4`), never from gender. Deceased people get a thin muted ring.
 - **Feedback** `Alert` (error, success, info), `EmptyState` on dot grid, `Loading` spinner,
   `ErrorState` for failed primary data.
-- **Family tree** `.tree` is a dot-grid canvas. Each generation has a coloured pill label and a
-  curved connector to the one above. `.person-node` is a 72px-high card with a 44px avatar,
-  a two-line name and life years; hover shows a brand outline ring.
-- **Feed** `.composer`, `.post`, pill `.reaction` buttons and bubble `.comment`s.
+- **Family map** is a dot-grid pan/zoom canvas with focused one-hop context and
+  progressive `+N` expansion. Partner connectors are distinct from parent/child
+  connectors; neither colour nor placement alone should imply parentage.
+  Selecting a person opens a desktop side inspector or mobile-adapted inspector.
+  The generations view remains a readable fallback with generation labels and
+  person cards; generation is never identity. `TreePage` includes the
+  Creator/Editor-only two-person partner form.
+- **People directory** has labelled name search, Grid/List segmented controls,
+  and counted filter chips: All, Linked accounts, Memorialized, Needs details,
+  Unconnected. Cards/rows show avatars, life years, occupation, relationship
+  context, optional Linked badges and See in tree actions. Empty family and
+  no search/filter matches have different empty states.
+- **Identity claims** offer person search and confirmation, Pending verification
+  with Cancel, and a verified linked identity with Unlink. The Creator queue has
+  Approve/Decline controls; these verify account links, not family relationships.
+- **Memories** retain `.composer`, `.post`, pill `.reaction` buttons and bubble
+  `.comment`s. The composer includes a searchable people tag picker (max 20);
+  tagged names link to Person profiles. These are family-private posts, not albums.
+- **Events** show date tiles, date/time/location/author and Going/Maybe/Can't go
+  segmented controls with counts. The selected response is pressed; selecting it
+  again clears the RSVP. A separate section shows derived birthdays/remembrances.
+  Every member can plan a gathering; deletion controls follow author/Creator
+  permissions, not Editor status.
 
 ## Accessibility checklist
 
@@ -142,11 +168,9 @@ All classes live in `src/client/styles.css`; React pieces live in `src/client/co
 
 ## Not implemented yet
 
-These came from the October 2026 design proposal and still need product, data or API work
-before they can be built. See `docs/execution/current-state.md` for status.
+The interactive map, partner links, claims, Memories, directory, events and
+family switcher are implemented. See `docs/execution/current-state.md` for verification.
 
-- An interactive pan and zoom family map with progressive `+N` expansion, a person
-  inspector and partner/union edges (needs a typed union relationship in the data model).
-- An account-to-person claim workflow (claim requests, verifier approval, audit).
-- Memories, albums, a people directory, user-created events and family settings routes.
-- A family switcher and global search.
+- Albums, global cross-family search and a dedicated family settings route.
+- Typed unions/marriages and relationship history beyond symmetric partner pairs.
+- Text-size setting UI and Playwright/axe checks in CI.

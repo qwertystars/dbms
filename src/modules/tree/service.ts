@@ -1,7 +1,13 @@
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "~/lib/db";
-import { auditEvents, familyMemberships, parentChildRelationships, people } from "~/db/schema";
+import {
+  auditEvents,
+  familyMemberships,
+  parentChildRelationships,
+  partnerRelationships,
+  people,
+} from "~/db/schema";
 import { Errors } from "~/lib/errors";
 import type { Account } from "~/lib/context";
 import { auditValues } from "~/modules/audit/service";
@@ -117,9 +123,14 @@ export async function getTree(
   direction: "ancestors" | "descendants" | "both" = "both",
   depth = 100,
 ) {
-  const edges = await db.query.parentChildRelationships.findMany({
-    where: eq(parentChildRelationships.familyId, familyId),
-  });
+  const [edges, partnerRows] = await Promise.all([
+    db.query.parentChildRelationships.findMany({
+      where: eq(parentChildRelationships.familyId, familyId),
+    }),
+    db.query.partnerRelationships.findMany({
+      where: eq(partnerRelationships.familyId, familyId),
+    }),
+  ]);
 
   // Without a root, return the whole family: every live person (including
   // people with no relationships yet) and every edge between live people.
@@ -127,7 +138,11 @@ export async function getTree(
     const allPeople = await db.query.people.findMany({
       where: and(eq(people.familyId, familyId), isNull(people.deletedAt)),
     });
-    return { people: allPeople, edges: edgesBetween(allPeople, edges) };
+    return {
+      people: allPeople,
+      edges: edgesBetween(allPeople, edges),
+      partners: partnersBetween(allPeople, partnerRows),
+    };
   }
 
   const root = await db.query.people.findFirst({
@@ -178,6 +193,11 @@ export async function getTree(
     }
   }
 
+  for (const row of partnerRows) {
+    if (row.personAId === rootPersonId) personIds.add(row.personBId);
+    if (row.personBId === rootPersonId) personIds.add(row.personAId);
+  }
+
   const treePeople = await db.query.people.findMany({
     where: and(
       eq(people.familyId, familyId),
@@ -186,7 +206,114 @@ export async function getTree(
     ),
   });
 
-  return { people: treePeople, edges: edgesBetween(treePeople, edges) };
+  return {
+    people: treePeople,
+    edges: edgesBetween(treePeople, edges),
+    partners: partnersBetween(treePeople, partnerRows),
+  };
+}
+
+function partnersBetween<T extends { personAId: string; personBId: string }>(
+  visiblePeople: { id: string }[],
+  rows: T[],
+): T[] {
+  const ids = new Set(visiblePeople.map((p) => p.id));
+  return rows.filter((r) => ids.has(r.personAId) && ids.has(r.personBId));
+}
+
+async function requireTreeEditor(account: Account, familyId: string) {
+  const membership = await db.query.familyMemberships.findFirst({
+    where: and(
+      eq(familyMemberships.familyId, familyId),
+      eq(familyMemberships.accountId, account.id),
+      isNull(familyMemberships.removedAt),
+    ),
+  });
+  if (!membership || (membership.role !== "CREATOR" && membership.role !== "EDITOR")) {
+    throw Errors.FORBIDDEN();
+  }
+  return membership;
+}
+
+/** Records two people as partners. Partnership is symmetric and never implies parentage. */
+export async function addPartner(
+  account: Account,
+  familyId: string,
+  firstPersonId: string,
+  secondPersonId: string,
+) {
+  if (firstPersonId === secondPersonId) throw Errors.PARTNER_SELF();
+  await requireTreeEditor(account, familyId);
+  await verifyPeopleInFamily(familyId, [firstPersonId, secondPersonId]);
+
+  const [personAId, personBId] = [firstPersonId, secondPersonId].sort();
+  const existing = await db.query.partnerRelationships.findFirst({
+    where: and(
+      eq(partnerRelationships.familyId, familyId),
+      eq(partnerRelationships.personAId, personAId),
+      eq(partnerRelationships.personBId, personBId),
+    ),
+  });
+  if (existing) throw Errors.PARTNER_DUPLICATE();
+
+  const partner = {
+    id: nanoid(),
+    familyId,
+    personAId,
+    personBId,
+    createdByAccountId: account.id,
+    createdAt: new Date(),
+  };
+  const auditor = auditValues({
+    actorAccountId: account.id,
+    familyId,
+    action: "PARTNER_ADDED",
+    targetType: "PartnerRelationship",
+    targetId: partner.id,
+    summary: { personAId, personBId },
+  });
+  await db.batch([
+    db.insert(partnerRelationships).values(partner).onConflictDoNothing(),
+    db.insert(auditEvents).values(auditor),
+    db
+      .delete(auditEvents)
+      .where(
+        and(
+          eq(auditEvents.id, auditor.id),
+          sql`NOT EXISTS (SELECT 1 FROM ${partnerRelationships} WHERE ${partnerRelationships.id} = ${partner.id})`,
+        ),
+      ),
+  ]);
+  const created = await db.query.partnerRelationships.findFirst({
+    where: eq(partnerRelationships.id, partner.id),
+  });
+  if (!created) throw Errors.PARTNER_DUPLICATE();
+  return created;
+}
+
+export async function removePartner(account: Account, familyId: string, relationshipId: string) {
+  await requireTreeEditor(account, familyId);
+  const row = await db.query.partnerRelationships.findFirst({
+    where: and(
+      eq(partnerRelationships.id, relationshipId),
+      eq(partnerRelationships.familyId, familyId),
+    ),
+  });
+  if (!row) throw Errors.NOT_FOUND();
+  await db.batch([
+    db.delete(partnerRelationships).where(eq(partnerRelationships.id, relationshipId)),
+    db.insert(auditEvents).values(
+      auditValues({
+        actorAccountId: account.id,
+        familyId,
+        action: "PARTNER_REMOVED",
+        targetType: "PartnerRelationship",
+        targetId: relationshipId,
+        summary: { personAId: row.personAId, personBId: row.personBId },
+      }),
+    ),
+  ]);
+  return { removed: true };
 }
 
 function edgesBetween<T extends { parentPersonId: string; childPersonId: string }>(

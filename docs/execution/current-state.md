@@ -59,7 +59,9 @@ The frontend is a Vite + React single-page application and the backend is a stan
 
 - Post attachments and account avatars can be uploaded through the API, but the UI only uploads person profile photos.
 
-Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF export, external import, AI) remain intentionally out of scope per the plan.
+Deferred features (DMs, public feed, typed marriage/union history, per-field privacy,
+PDF export, external import, AI) remain out of scope. Simple symmetric partner
+links are implemented in this branch.
 
 ## Database
 
@@ -86,13 +88,13 @@ Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF
 - `src/client/auth.tsx` provides an `AuthProvider` (`/api/v1/me`) and a `RequireAuth` guard that redirects to `/sign-in?returnTo=…`.
 - Vite dev server proxies `/api` to the Hono server on `localhost:3000`.
 - Visual design ("Living Archive", `docs/design/design-system.md`, October 2026): green-on-ivory light theme (`notebook`) and deep green dark theme (`slate`), OS default plus a stored user choice (`src/client/theme.tsx`); Inter, Newsreader and Noto Sans Indic fonts from Google Fonts; 44px default controls; a responsive app shell (desktop sidebar, tablet icon rail, mobile top bar plus bottom navigation); segmented family tabs; deterministic neutral initials avatars and a muted memorial ring; a dot-grid tree canvas with generation pills, curved connectors and 72px person nodes; a landing page with a decorative family-map illustration. The Banyan mark, wordmark, favicon and app icon from `public/brand/` are kept. This supersedes the colour and type sections of `docs/product/banyan-spec.md` §3 (Anek, Kavivanar, ink/red-pen/highlighter palette, no all-caps labels).
-- Styling is a single dependency-free stylesheet, `src/client/styles.css`: semantic tokens per theme on `:root`, plus plain component classes (`.shell`, `.sidebar`, `.card`, `.btn`, `.input`, `.list`, `.tabs`, `.badge`, `.person-node`, `.reaction`, `.comment`, `.event`, and so on). There is no CSS framework. Not done: the interactive pan-and-zoom family map, person inspector, claim workflow, memories, people directory and events routes from the design proposal, the text-size setting UI (the `--bn-text-scale` hook exists), and Playwright/axe in CI.
-- Shared UI building blocks live in `src/client/components/ui.tsx` (`Loading`, `Alert`, `EmptyState`, `ErrorState`, `PageHeader`, `Card`, `Field`, `RoleBadge`, `Avatar`, `CopyField`, `useBusy`, `timeAgo`, `relativeDay`, `shortDate`, `formatDate`, `lifeSpan`, inline icons). `components/PostCard.tsx` owns the feed post card (reactions, comments, edit/delete). `FamilyHeader` (`components/FamilyNav.tsx`) renders the family name, role badge, and Overview/Tree/Feed tabs. `components/families.tsx` holds `FamilyCard` and `CreateFamilyForm`.
+- Styling is a single dependency-free stylesheet, `src/client/styles.css`, with semantic tokens and plain component classes; there is no CSS framework. This branch delivers the interactive map, inspector, claims, Memories, directory and events described below. Text-size setting UI (the `--bn-text-scale` hook exists) and Playwright/axe in CI remain outstanding.
+- Shared UI building blocks live in `src/client/components/ui.tsx` (`Loading`, `Alert`, `EmptyState`, `ErrorState`, `PageHeader`, `Card`, `Field`, `RoleBadge`, `Avatar`, `CopyField`, `useBusy`, `timeAgo`, `relativeDay`, `shortDate`, `formatDate`, `lifeSpan`, inline icons). `components/PostCard.tsx` owns the memory post card (reactions, comments, edit/delete). `FamilyHeader` (`components/FamilyNav.tsx`) renders the family name, role badge, and Overview/Tree/Memories/People/Events tabs. `components/families.tsx` holds `FamilyCard` and `CreateFamilyForm`.
 - Every page has loading, empty, and error states, and submit buttons show a pending state.
 - Member lists and feed posts show account display names. The friends page shows display names, lets you remove friends and cancel sent requests, and shows your own account ID with a copy button, because friend requests are still sent by account ID.
 - Role-aware UI follows the permission matrix: every member (including Viewers) can post and export; Creators and Editors can add people and relationships; only Creators can invite.
 - `src/client/api.ts` turns network failures into an error result (`status: 0`) so pages show a message instead of loading forever.
-- The tree page groups people into generations on the client (presentation only; see `layoutGenerations` in `TreePage.tsx`) and lists people with no relationships separately. Person pages show parents and children as links, loaded with `GET /tree?rootPersonId=…&depth=1`.
+- The tree page delivers pan/zoom, focused one-hop expansion with `+N`, distinct partner connectors, desktop/mobile person inspectors, a generations fallback, and a Creator/Editor partner form. Layout remains presentation-only. Person pages load relationship context with `GET /tree?rootPersonId=…&depth=1`.
 - `GET /families/:id/tree` returns every live person when no root is given (including people with no relationships), validates `direction`, and honours `depth`.
 - Layout is responsive and verified at 390px and 360px widths with no horizontal scrolling.
 
@@ -111,7 +113,8 @@ Deferred features (DMs, public feed, spouse relationship, per-field privacy, PDF
 ## Tests
 
 - `tests/setup.ts`, `tests/helpers.ts`, `tests/family.test.ts`, `tests/authorization.test.ts`, `tests/hardening.test.ts`, `tests/engagement.test.ts`, `tests/production.test.ts`.
-- 68 tests across 8 files, including Google OAuth callback and session security tests.
+- 94 tests across 10 files, including Google OAuth callback/session security,
+  graph-feature authorization and transactional regressions, and map layout tests.
 - Covers family lifecycle, invitations, role authorization, cross-family isolation, tree cycles/self-edges, expired/duplicate invitations, and friendship-without-family-access.
 - Also covers Viewer posting/export, whole-family and depth-limited tree projections, tree query validation, friend requests to unknown accounts, friend display names, and mutual friend requests.
 - New hardening coverage: development sign-in is absent and cannot mint tokens when disabled, a single-use invitation accepts exactly one account (including two concurrent acceptances), person deletion soft-deletes and detaches relationships, ownership transfer swaps roles, exports are audited, and sensitive mutations write audit events.
@@ -142,6 +145,70 @@ Google OAuth is deployed to production via Cloudflare Git integration. Optional 
 - Add coverage thresholds to CI (migration drift is already checked).
 
 After any implementation work, update this file with factual status.
+
+## Family graph and engagement branch (October 23, 2026)
+
+Delivered in this branch:
+
+- Partner create/delete API for Creator/Editor with distinct live same-family
+  people, canonical unordered pairs, duplicate/self rejection and add/remove
+  audits. Tree responses contain `people`, ancestry `edges` and separate
+  `partners`; rooted projections add only the root's direct partners, without
+  traversing ancestry through partners.
+- Claims request/list/Creator approval or rejection/requester cancel/self-unlink.
+  Creator lists pending family requests; other members list their own history.
+  Approval alone assigns membership `personId`, including for Creator
+  self-claims; it never changes role or tree edges. Request/decision/unlink audits
+  are present. Rival requests may coexist until approval-time conflict checks.
+- User-created family events, distinct from derived birthdays/remembrances.
+  Any active member can create/list/RSVP; only the author edits, and author or
+  Creator deletes. RSVP supports Going/Maybe/Not going, replacement, clearing,
+  counts and the caller's response. Deletion is soft and audited.
+- Memory tagging with optional `personIds` (max 20 submitted IDs, deduplicated,
+  live same-family targets), `taggedPeople` in responses, and a `personId` posts
+  filter. Only authors edit memories; Creator moderation is deletion-only.
+- Migration `0003_safe_deathstrike.sql`: partner relationships, claim requests,
+  family events, RSVPs and post/person tags. Person deletion detaches both
+  relationship types and tags, clears membership links and cancels pending claims.
+- People directory with local case-insensitive name search, alphabetical results,
+  grid/list layouts, and All/Linked accounts/Memorialized/Needs details/Unconnected
+  filters with whole-family counts. Needs details means missing birth date, photo
+  or biography; Unconnected includes absence of partner links as well as ancestry.
+- Shared Overview/Tree/Memories/People/Events tabs, a desktop sidebar family
+  switcher, and a compact switcher above page content on tablet and phone.
+  Switching preserves recognized sections rather than person IDs. Memories lives
+  at `/app/families/:familyId/memories`; `/feed` replace-redirects there while the
+  API remains `/posts`. ClaimPanel lives on Overview; events UI creates, deletes
+  and toggles RSVP alongside a derived dates section.
+- Interactive map delivery in `TreePage`: pan/zoom, focused one-hop context,
+  progressive `+N` expansion, visually distinct partners, desktop/mobile
+  inspector, generations fallback and partner form. `FamilyMap` owns camera and
+  inspector state; `map-layout.ts` computes presentation positions from explicit edges.
+
+### Verification and remaining limitations
+
+- Migration 0003 includes the ordered partner-pair CHECK. Claim transitions consume
+  `PENDING` conditionally and link only eligible live targets in an atomic batch.
+  Cancellation is audited. Memory body/tag writes are atomic after tag validation.
+- `tests/graph-features.test.ts` covers partner authorization, canonical ordering,
+  audit records, claims and deterministic competing transitions, event authorization,
+  RSVP counts, memory filtering, rollback and deletion cleanup.
+  `tests/map-layout.test.ts` covers one-generation visibility and co-parent alignment.
+- Brave Origin visual QA covers 11 routes at 1440, 768, 390 and 320px in both themes,
+  including top/bottom captures. No document overflow or browser runtime exceptions
+  were observed. Map pan/zoom/expansion/inspectors, directory filters and deep links,
+  claim approval, tagged memory composition/profile display, event creation and
+  RSVP replacement/clearing were exercised through the real interface.
+- Event creation/editing and RSVP changes have no dedicated audits; event deletion does.
+  Event editing remains API-only. The `/people` endpoint defaults to 100 results;
+  directory, claim choices and the memory composer use the full family tree instead.
+- No production deployment or remote migration application is claimed for this slice.
+- Local verification passed: Prettier, ESLint, `tsc --noEmit`, all 94 Vitest tests,
+  Vite production build, migration application, and `db:generate` with no schema drift.
+
+Earlier feed references mean Memories at the branch routes above. Albums, global
+search, dedicated family settings and typed union history are not delivered by
+this slice.
 
 ## Direct Google authentication (October 11, 2026)
 

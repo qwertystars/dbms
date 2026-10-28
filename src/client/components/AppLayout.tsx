@@ -1,5 +1,8 @@
-import { Link, NavLink, Outlet } from "react-router-dom";
+import { useEffect, useId, useState } from "react";
+import { Link, NavLink, Outlet, matchPath, useLocation, useNavigate } from "react-router-dom";
+import { api } from "~/client/api";
 import { useAuth } from "~/client/auth";
+import { FAMILY_SECTIONS } from "~/client/components/FamilyNav";
 import { Avatar, Icon } from "~/client/components/ui";
 import { useSession } from "~/client/session";
 import { useTheme } from "~/client/theme";
@@ -58,6 +61,65 @@ function NavLinks() {
   ));
 }
 
+interface FamilyOption {
+  id: string;
+  name: string;
+}
+
+function FamilySwitcher() {
+  const selectId = useId();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [families, setFamilies] = useState<FamilyOption[]>([]);
+  const match = matchPath("/app/families/:familyId/*", location.pathname);
+  const currentId = match?.params.familyId;
+
+  useEffect(() => {
+    void api("GET", "/api/v1/families").then((res) => {
+      if (res.status === 200) {
+        setFamilies(
+          (res.body.families || []).map((f: any) => ({ id: f.family.id, name: f.family.name })),
+        );
+      }
+    });
+  }, [currentId]);
+
+  if (families.length === 0) return null;
+  const activeId = currentId && families.some((f) => f.id === currentId) ? currentId : undefined;
+  const contextId = activeId ?? families[0].id;
+  const section = match?.params["*"] ? `/${match.params["*"].split("/")[0]}` : "";
+  const sectionPath = FAMILY_SECTIONS.some((s) => s.path === section) ? section : "";
+
+  return (
+    <div className="family-switcher">
+      <label className="sidenav-label" htmlFor={selectId}>
+        Family
+      </label>
+      <select
+        id={selectId}
+        aria-label="Switch family"
+        className="select family-switcher-select"
+        value={contextId}
+        onChange={(e) => navigate(`/app/families/${e.target.value}${sectionPath}`)}
+      >
+        {families.map((f) => (
+          <option key={f.id} value={f.id}>
+            {f.name}
+          </option>
+        ))}
+      </select>
+      <nav className="sidenav sidenav-family" aria-label="Family sections">
+        {FAMILY_SECTIONS.map((s) => (
+          <NavLink key={s.label} to={`/app/families/${contextId}${s.path}`} end={s.path === ""}>
+            <Icon name={s.icon} size={18} />
+            <span>{s.label}</span>
+          </NavLink>
+        ))}
+      </nav>
+    </div>
+  );
+}
+
 export function AppLayout() {
   const { me } = useAuth();
   const { signOut } = useSession();
@@ -69,6 +131,7 @@ export function AppLayout() {
           <span className="sidenav-label">Menu</span>
           <NavLinks />
         </nav>
+        <FamilySwitcher />
         <div className="sidebar-foot">
           <div className="sidebar-user">
             <Avatar name={me?.displayName} size="sm" />
@@ -93,6 +156,9 @@ export function AppLayout() {
 
       <div className="shell-main">
         <main className="container page">
+          <div className="compact-family-context">
+            <FamilySwitcher />
+          </div>
           <Outlet />
         </main>
       </div>

@@ -134,7 +134,9 @@ Role: Creator/Editor.
 
 Role: any family member.
 
-Supports search/pagination.
+Supports `?search=...` (case-insensitive name matching). The route does not expose
+pagination parameters; the service defaults to at most 100 results. Directory
+search, filters and grid/list layout operate client-side on the full tree projection.
 
 ### API-PERSON-03
 
@@ -166,10 +168,11 @@ Optional query:
 - `direction=ancestors|descendants|both` (default `both`; any other value is `400`)
 - `depth` integer 1-100 (default 100), the number of generations to walk from the root
 
-Response contains normalized `people[]` and `edges[]`.
+Role: any active family member. Response contains normalized `people[]`,
+parent/child `edges[]`, and distinct symmetric `partners[]`.
 
 - Without `rootPersonId`: every non-deleted person in the family, including people with no relationships, and every edge between them. `direction` and `depth` are ignored.
-- With `rootPersonId`: the root plus its ancestors and/or descendants up to `depth` generations, and the edges between the returned people. Unknown or deleted root is `404`.
+- With `rootPersonId`: the root plus its ancestors and/or descendants up to `depth` generations, plus the root's direct partners regardless of direction. Only relationships between returned live people are included. Partners do not extend ancestry traversal. Unknown or deleted root is `404`.
 
 ### API-TREE-02 — Add parent/child edge
 
@@ -199,6 +202,54 @@ Possible domain errors:
 
 Role: Creator/Editor.
 
+### API-TREE-04 — Add partner link
+
+`POST /families/{familyId}/relationships/partners`
+
+Role: Creator/Editor. Body: `{ personAId, personBId }`.
+Returns `201 { partner }`. Both people must be live and in this family. The service
+sorts the IDs before insertion; reversing a pair is a duplicate. Partnership does
+not create parentage, a marriage record, or a union entity.
+
+Domain conflicts (`409`): `PARTNER_SELF`, `PARTNER_DUPLICATE`,
+`PERSON_NOT_IN_FAMILY`. Successful additions write `PARTNER_ADDED`.
+
+### API-TREE-05 — Remove partner link
+
+`DELETE /families/{familyId}/relationships/partners/{relationshipId}`
+
+Role: Creator/Editor. Returns `{ removed: true }`; unknown family-scoped link: `404`.
+Successful removal writes `PARTNER_REMOVED`.
+
+## Account-to-person claims
+
+All operations require active membership in the addressed family. These link an
+account's membership to a Person, never change the family graph or grant a role.
+Machine-validatable decision input: `claimDecisionSchema` in `src/lib/schemas.ts`.
+
+| Method and family-relative route            | Authorization                                                                     | Body / response                                                                                                |
+| ------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| POST `/people/{personId}/claim-requests`    | Any member with no person link or pending request                                 | No body; `201 { request }`, status `PENDING`                                                                   |
+| GET `/claim-requests`                       | Creator: all family pending requests; other members: own requests in every status | `{ requests }`, newest first, with `person: { id, name, profileMediaId }` and `requester: { id, displayName }` |
+| POST `/claim-requests/{requestId}/decision` | Creator only, including for their own request                                     | `{ decision: "APPROVED" \| "REJECTED" }`; `{ request }`                                                        |
+| DELETE `/claim-requests/{requestId}`        | Requesting membership only, while pending                                         | `{ request }`, status `CANCELLED`                                                                              |
+| DELETE `/me/person-link`                    | Own membership only                                                               | `{ unlinked: true }`, or `{ unlinked: false }` if already unlinked                                             |
+
+Prefix each route above with `/families/{familyId}`. Approval rechecks that the
+requesting membership is active and unlinked and the target Person is live,
+same-family and not linked to another active membership. Multiple members may
+request the same Person; approval does not automatically reject rival requests.
+Creators must explicitly approve their own requests; creation never auto-links.
+Approval/rejection records the deciding account and time. Cancellation records
+the time but not a deciding account. Unlinking leaves the Person and graph intact.
+
+Conflicts (`409`): `CLAIM_PENDING`, `CLAIM_ALREADY_LINKED`, `CLAIM_CONFLICT`,
+`CLAIM_NOT_PENDING` (also used if the requester has left at approval time).
+Unknown request or non-live target: `404`; unauthorized action: `403`.
+Audits: `CLAIM_REQUESTED`, `CLAIM_APPROVED`, `CLAIM_REJECTED`,
+`CLAIM_CANCELLED`, `PERSON_LINK_REMOVED`. Decisions and cancellations conditionally
+consume `PENDING` inside an atomic batch; unsuccessful transitions leave no audit.
+
 ## Export
 
 ### API-EXPORT-01
@@ -213,7 +264,14 @@ Role: any family member in v1.
 
 Export includes only data visible to the requesting account.
 
-## Family social feed
+## Family memories (posts API)
+
+The UI calls posts "Memories"; API paths remain `/posts`.
+Create and update schemas require `body` (1-5000 characters) and accept optional
+`personIds` (at most 20 submitted IDs, each an opaque 1-64-character identifier).
+Duplicates are deduplicated by the service. Every tag must identify a live Person
+in this family, otherwise `409 PERSON_NOT_IN_FAMILY`.
+Create/update/list responses include `taggedPeople: [{ id, name }]`.
 
 ### API-POST-01
 
@@ -223,7 +281,7 @@ Role: any family member.
 
 ### API-POST-02
 
-`GET /families/{familyId}/posts?cursor=...&limit=...`
+`GET /families/{familyId}/posts?cursor=...&limit=...&personId=...`
 
 Role: any family member.
 
@@ -231,12 +289,17 @@ Cursor pagination required. `limit` defaults to 20 (max 50). The cursor combines
 timestamp and id, so posts created within the same second are not skipped. Each post
 includes `author` (id and displayName), `reactionCounts`, `commentCount`, and the
 requesting account's `myReaction`.
+Optional `personId` restricts results to memories tagged with that Person; the
+query remains family-scoped. An unmatched ID returns an empty list.
 
 ### API-POST-03
 
 `PATCH /families/{familyId}/posts/{postId}`
 
-Author, or Creator for moderation where the operation is explicitly supported.
+Active member and post author only; Creator cannot edit another author's post.
+Omitting `personIds` preserves tags; `[]` clears them; a supplied list replaces them.
+Current implementation writes the body before validating/replacing tags, so an
+invalid tag update can return a conflict after the body has changed.
 
 ### API-POST-04
 
@@ -288,6 +351,35 @@ Returns birthdays and memorial anniversaries from every family the account belon
 within the next `days` days (1-365, default 45), sorted by `daysUntil`. Each event includes
 `familyId`, `familyName`, `personId`, `personName`, `type` (`birthday` or `memorial`),
 `date`, `daysUntil`, and `age` (turning age or years since passing, when known).
+
+### User-created family events and RSVP
+
+These are separate from the derived birthday/memorial endpoint. All routes below
+require active membership, including author edits/deletes and Creator moderation.
+Prefix with `/families/{familyId}`.
+
+| Method and route                | Authorization                           | Response                                                                    |
+| ------------------------------- | --------------------------------------- | --------------------------------------------------------------------------- |
+| GET `/events?from=YYYY-MM-DD`   | Any member                              | `{ events }`; live events with `startsOn >= from`, sorted by date then time |
+| POST `/events`                  | Any member, including Viewer            | `201 { event }`                                                             |
+| PATCH `/events/{eventId}`       | Event author only, not Creator override | `{ event }`                                                                 |
+| DELETE `/events/{eventId}`      | Event author or family Creator          | `{ deleted: true }` (soft delete, audited)                                  |
+| PUT `/events/{eventId}/rsvp`    | Any member, own response only           | `{ eventId, response }`                                                     |
+| DELETE `/events/{eventId}/rsvp` | Any member, own response only           | `{ removed: true }`                                                         |
+
+`from` defaults to today's UTC date. List rows include
+`creator: { id, displayName }`, `rsvpCounts: { GOING, MAYBE, NOT_GOING }`
+(zero-filled counts), and `myRsvp` (response or `null`).
+
+`familyEventCreateSchema` requires trimmed `title` (1-200 characters) and
+`startsOn` (valid `YYYY-MM-DD`). Optional nullable fields: `description` (max 2000),
+`startTime` (`HH:MM`, 24-hour), `location` (max 300). Update uses the partial
+schema. No timezone or recurrence field is stored. `rsvpSchema` accepts
+`{ response: "GOING" | "MAYBE" | "NOT_GOING" }`; repeated PUT replaces the
+account's existing response. DELETE clears it. Invalid input: `400`;
+non-member or prohibited ownership action: `403`; missing/deleted event: `404`.
+Deletion writes `FAMILY_EVENT_DELETED`; creation, editing and RSVP changes do not
+currently write dedicated audits.
 
 ## Friends
 

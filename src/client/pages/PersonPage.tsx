@@ -53,10 +53,12 @@ export function PersonPage() {
     setError(null);
     setEditing(false);
     (async () => {
-      const [family, person, tree] = await Promise.all([
+      const [family, person, tree, members, posts] = await Promise.all([
         api("GET", `/api/v1/families/${familyId}`),
         api("GET", `/api/v1/families/${familyId}/people/${personId}`),
         api("GET", `/api/v1/families/${familyId}/tree?rootPersonId=${personId}&depth=1`),
+        api("GET", `/api/v1/families/${familyId}/members`),
+        api("GET", `/api/v1/families/${familyId}/posts?personId=${personId}`),
       ]);
       if (cancelled) return;
       if (family.status !== 200) {
@@ -75,7 +77,18 @@ export function PersonPage() {
       const children = edges
         .filter((e) => e.parentPersonId === personId && people.has(e.childPersonId))
         .map((e) => people.get(e.childPersonId));
+      const partners = ((tree.body.partners || []) as any[])
+        .filter((r) => r.personAId === personId || r.personBId === personId)
+        .map((r) => (r.personAId === personId ? r.personBId : r.personAId))
+        .filter((id) => id !== personId && people.has(id))
+        .map((id) => people.get(id));
+      const linkedMember = ((members.body?.members || []) as any[]).find(
+        (m) => m.personId === personId,
+      );
       setData({
+        partners,
+        linkedTo: linkedMember?.account?.displayName ?? null,
+        memories: posts.status === 200 ? posts.body.posts || [] : [],
         family: family.body.family,
         role: family.body.membership.role,
         person: person.body.person,
@@ -395,8 +408,40 @@ export function PersonPage() {
         </div>
 
         <div className="stack">
+          <Card title="Account">
+            <p className="subtle">
+              {data.linkedTo ? (
+                <>
+                  <span className="badge badge-editor">Linked</span> Verified as {data.linkedTo}'s
+                  profile.
+                </>
+              ) : (
+                "Not linked to an account. Members can claim it from the family Overview."
+              )}
+            </p>
+          </Card>
           <Card title="Parents">{relatives(data.parents, "No parents recorded.")}</Card>
+          <Card title="Partners">{relatives(data.partners, "No partners recorded.")}</Card>
           <Card title="Children">{relatives(data.children, "No children recorded.")}</Card>
+          <Card title="Memories" description={`Shared moments tagged with ${p.name}.`}>
+            {data.memories.length === 0 ? (
+              <p className="muted">No memories tag this person yet.</p>
+            ) : (
+              <ul className="memory-list">
+                {data.memories.slice(0, 5).map((post: any) => (
+                  <li key={post.id}>
+                    <p className="memory-snippet">{post.body || "Shared a photo"}</p>
+                    <span className="subtle">
+                      {post.author?.displayName} · {new Date(post.createdAt).toLocaleDateString()}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <Link className="btn btn-sm" to={`/app/families/${familyId}/memories`}>
+              All memories
+            </Link>
+          </Card>
         </div>
       </div>
     </>
