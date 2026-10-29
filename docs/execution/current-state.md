@@ -108,6 +108,7 @@ links are implemented in this branch.
 
 - The Worker bundle does not depend on Node-only modules beyond the `nodejs_compat` polyfill: token hashing uses Web Crypto (`crypto.subtle`/`getRandomValues`), and `dotenv` is imported only by the Node entry (`src/server/index.ts`). `node:async_hooks` is provided by `nodejs_compat`.
 - `.env.example` documents `DATABASE_URL`, `APP_BASE_URL`, `PORT`, and auth settings including `AUTH_PROVIDER` and `AUTH_DEV_MODE`. The unused S3 `OBJECT_STORAGE_*` settings were removed.
+- The Worker serves `banyan.srijan-guchhait.workers.dev` and the custom domain `banyan.qwertystars.dev`. `APP_ALLOWED_ORIGINS` (optional, comma-separated) adds origins beyond `APP_BASE_URL` to the same-origin check, and the Google OAuth `redirect_uri` uses the request origin when it is listed.
 - `.github/workflows/ci.yml` runs format, lint, type-check, migration generation, migration drift check, migration application to a local SQLite file, `vite build` + `wrangler deploy --dry-run`, and tests.
 
 ## Tests

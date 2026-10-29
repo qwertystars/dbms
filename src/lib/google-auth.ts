@@ -8,6 +8,7 @@ import { env } from "~/lib/env";
 import { getCredentialVersion } from "~/modules/accounts/credentials";
 import { getOrCreateAccount } from "~/modules/accounts/service";
 import { hashToken, randomToken } from "~/lib/crypto";
+import { appOrigin, sameOrigin } from "~/lib/request-security";
 
 const googleKeys = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
 const now = () => Math.floor(Date.now() / 1000);
@@ -86,7 +87,7 @@ googleAuth.get("/api/auth/google", async (c) => {
   const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   url.search = new URLSearchParams({
     client_id: env.GOOGLE_CLIENT_ID!,
-    redirect_uri: `${new URL(env.APP_BASE_URL).origin}/api/auth/google/callback`,
+    redirect_uri: `${appOrigin(c)}/api/auth/google/callback`,
     response_type: "code",
     scope: "openid email profile",
     state,
@@ -123,7 +124,7 @@ googleAuth.get("/api/auth/google/callback", async (c) => {
         code: c.req.query("code")!,
         client_id: env.GOOGLE_CLIENT_ID!,
         client_secret: env.GOOGLE_CLIENT_SECRET!,
-        redirect_uri: `${new URL(env.APP_BASE_URL).origin}/api/auth/google/callback`,
+        redirect_uri: `${appOrigin(c)}/api/auth/google/callback`,
         grant_type: "authorization_code",
         code_verifier: attempt.verifier,
       }),
@@ -165,12 +166,7 @@ googleAuth.get("/api/auth/google/callback", async (c) => {
 });
 
 googleAuth.post("/api/auth/logout", async (c) => {
-  const origin = c.req.header("origin");
-  if (
-    (origin && origin !== new URL(env.APP_BASE_URL).origin) ||
-    c.req.header("sec-fetch-site") === "cross-site"
-  )
-    return c.json({ error: "Cross-site logout rejected" }, 403);
+  if (!sameOrigin(c)) return c.json({ error: "Cross-site logout rejected" }, 403);
   const token = getCookie(c, "banyan_session");
   if (token) {
     const db = await requestDb(c);

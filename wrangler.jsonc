@@ -8,6 +8,7 @@
   // OAuth callback URLs must be registered with Google; preview URLs stay off.
   "workers_dev": true,
   "preview_urls": false,
+  "routes": [{ "pattern": "banyan.qwertystars.dev", "custom_domain": true }],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
@@ -20,6 +21,8 @@
   },
   "vars": {
     "APP_BASE_URL": "https://banyan.srijan-guchhait.workers.dev",
+    // Custom domains serving the same Worker; each needs its own Google callback.
+    "APP_ALLOWED_ORIGINS": "https://banyan.qwertystars.dev",
     "AUTH_PROVIDER": "google",
     // Set GOOGLE_CLIENT_ID here and GOOGLE_CLIENT_SECRET with wrangler secret put.
     "GOOGLE_CLIENT_ID": "226763122782-p9pre6j56cirs2egedcots6hep4vo08u.apps.googleusercontent.com",

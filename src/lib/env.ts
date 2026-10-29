@@ -5,6 +5,8 @@ const emptyToUndefined = (v: unknown) => (typeof v === "string" && v.trim() === 
 const envSchema = z.object({
   DATABASE_URL: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   APP_BASE_URL: z.preprocess(emptyToUndefined, z.string().url().default("http://localhost:3000")),
+  // Comma-separated extra origins (custom domains) that serve the same app.
+  APP_ALLOWED_ORIGINS: z.preprocess(emptyToUndefined, z.string().optional()),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   AUTH_JWKS_URI: z.preprocess(emptyToUndefined, z.string().url().optional()),
   AUTH_JWKS: z.preprocess(emptyToUndefined, z.string().optional()),
