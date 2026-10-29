@@ -10,6 +10,14 @@ screen and, while the app is in testing, add permitted test users. Register this
 exact authorized redirect URI:
 
 `https://banyan.srijan-guchhait.workers.dev/api/auth/google/callback`
+`https://banyan.qwertystars.dev/api/auth/google/callback`
+
+The Worker also serves the custom domain `banyan.qwertystars.dev` (the `routes`
+entry in `wrangler.jsonc`). `APP_ALLOWED_ORIGINS` lists such extra origins,
+comma-separated. Requests from them pass the same-origin check, and Google
+sign-in returns to the domain where it started. Unknown hosts fall back to
+`APP_BASE_URL`. Every listed origin needs its own registered callback URI.
+Sessions are per hostname, so each domain needs its own sign-in.
 
 Set `GOOGLE_CLIENT_ID` in `wrangler.jsonc` and store `GOOGLE_CLIENT_SECRET` using
 `pnpm exec wrangler secret put GOOGLE_CLIENT_SECRET`. Do not commit the secret.
